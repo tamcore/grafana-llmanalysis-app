@@ -23,7 +23,9 @@ type Settings struct {
 	TimeoutSeconds int               `json:"timeoutSeconds"`
 	MaxTokens      int               `json:"maxTokens"`
 	CustomHeaders  map[string]string `json:"customHeaders,omitempty"`
+	GrafanaURL     string            `json:"grafanaURL,omitempty"`
 	APIKey         string            `json:"-"`
+	GrafanaToken   string            `json:"-"`
 }
 
 // App is the main plugin instance.
@@ -54,13 +56,29 @@ func NewApp(_ context.Context, appSettings backend.AppInstanceSettings) (instanc
 		settings.APIKey = apiKey
 	}
 
+	if grafanaToken, ok := appSettings.DecryptedSecureJSONData["grafanaToken"]; ok {
+		settings.GrafanaToken = grafanaToken
+	}
+
+	grafanaURL := settings.GrafanaURL
+	if grafanaURL == "" {
+		grafanaURL = "http://localhost:3000"
+	}
+
 	logger := log.DefaultLogger
+
+	te := NewToolExecutor(grafanaURL)
+	if settings.GrafanaToken != "" {
+		te.defaultHeaders = map[string]string{
+			"Authorization": "Bearer " + settings.GrafanaToken,
+		}
+	}
 
 	app := &App{
 		settings:     settings,
 		logger:       logger,
 		metrics:      newMetrics(prometheus.NewRegistry()),
-		toolExecutor: NewToolExecutor("http://localhost:3000"),
+		toolExecutor: te,
 	}
 
 	app.registerRoutes()

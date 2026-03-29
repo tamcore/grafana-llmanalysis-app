@@ -13,8 +13,9 @@ import (
 
 // ToolExecutor executes tool calls by querying Grafana datasources.
 type ToolExecutor struct {
-	grafanaURL string
-	httpClient *http.Client
+	grafanaURL     string
+	httpClient     *http.Client
+	defaultHeaders map[string]string
 }
 
 // NewToolExecutor creates a new tool executor.
@@ -183,6 +184,10 @@ func (te *ToolExecutor) doGrafanaRequest(ctx context.Context, method, path strin
 		return "", fmt.Errorf("create request: %w", err)
 	}
 
+	// Apply default headers first, then request-specific headers
+	for k, v := range te.defaultHeaders {
+		req.Header.Set(k, v)
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}

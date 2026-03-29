@@ -24,6 +24,8 @@ export function AppConfig({ plugin }: Props) {
     maxTokens: jsonData.maxTokens || 4096,
     apiKey: '',
     apiKeySet: Boolean(secureJsonFields.apiKey),
+    grafanaToken: '',
+    grafanaTokenSet: Boolean(secureJsonFields.grafanaToken),
   });
 
   const [saving, setSaving] = useState(false);
@@ -42,12 +44,19 @@ export function AppConfig({ plugin }: Props) {
     setState({ ...state, apiKey: '', apiKeySet: false });
   };
 
+  const onResetGrafanaToken = () => {
+    setState({ ...state, grafanaToken: '', grafanaTokenSet: false });
+  };
+
   const onSave = async () => {
     setSaving(true);
     try {
       const secureJsonData: Record<string, string> = {};
       if (state.apiKey) {
         secureJsonData.apiKey = state.apiKey;
+      }
+      if (state.grafanaToken) {
+        secureJsonData.grafanaToken = state.grafanaToken;
       }
 
       await getBackendSrv().post(`/api/plugins/${meta.id}/settings`, {
@@ -62,7 +71,7 @@ export function AppConfig({ plugin }: Props) {
         secureJsonData,
       });
 
-      setState({ ...state, apiKeySet: true, apiKey: '' });
+      setState({ ...state, apiKeySet: true, apiKey: '', grafanaTokenSet: state.grafanaToken ? true : state.grafanaTokenSet, grafanaToken: '' });
     } finally {
       setSaving(false);
     }
@@ -133,6 +142,17 @@ export function AppConfig({ plugin }: Props) {
             value={state.maxTokens}
             onChange={onChangeNumber('maxTokens')}
             width={20}
+          />
+        </Field>
+
+        <Field label="Grafana Service Account Token" description="Optional: Allows the LLM to query datasources (Prometheus, Loki) for real-time data. Create a Viewer service account in Grafana and paste its token here.">
+          <SecretInput
+            aria-label="Grafana Token"
+            isConfigured={state.grafanaTokenSet}
+            value={state.grafanaToken}
+            onChange={onChangeString('grafanaToken')}
+            onReset={onResetGrafanaToken}
+            width={60}
           />
         </Field>
       </FieldSet>
