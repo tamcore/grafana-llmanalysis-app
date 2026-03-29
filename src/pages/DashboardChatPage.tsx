@@ -397,6 +397,31 @@ export function DashboardChatPage() {
           />
         </Field>
 
+        {dashboardContext && !isStreaming && (
+          <div className={styles.quickActions}>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="document-info"
+              onClick={() => {
+                setPrompt('Explain this dashboard in detail: what each panel shows, key metrics to watch, and how they relate to each other.');
+              }}
+            >
+              Explain Dashboard
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="bolt"
+              onClick={() => {
+                setPrompt('What looks unusual or concerning on this dashboard right now? Query the actual metrics and check for anomalies.');
+              }}
+            >
+              Find Anomalies
+            </Button>
+          </div>
+        )}
+
         {loading && <p>Loading dashboard...</p>}
 
         <ChatView messages={messages} isStreaming={isStreaming} streamContent={streamContent} activeToolCalls={activeToolCalls} />
@@ -539,6 +564,11 @@ function getStyles(theme: GrafanaTheme2) {
       padding: theme.spacing(1.5),
       background: theme.colors.background.secondary,
       borderRadius: theme.shape.radius.default,
+    }),
+    quickActions: css({
+      display: 'flex',
+      gap: theme.spacing(1),
+      marginBottom: theme.spacing(1),
     }),
     inputRow: css({
       display: 'flex',

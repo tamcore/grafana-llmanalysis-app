@@ -115,4 +115,25 @@ describe('DashboardChatPage', () => {
     const input = screen.getByPlaceholderText('Select a dashboard first');
     expect(input).toBeDisabled();
   });
+
+  it('shows quick action buttons after dashboard is loaded', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    render(<DashboardChatPage />);
+
+    // Wait for dashboard list to load first
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-select')).toBeInTheDocument();
+    });
+
+    const select = screen.getByTestId('dashboard-select');
+    fireEvent.change(select, { target: { value: 'dash-1' } });
+
+    // Wait for dashboard to load and context to be set (the loaded message is the signal)
+    await waitFor(() => {
+      expect(screen.getByText(/Loaded/)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Explain Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Find Anomalies')).toBeInTheDocument();
+  });
 });

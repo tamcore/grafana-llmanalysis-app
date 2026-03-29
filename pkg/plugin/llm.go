@@ -96,7 +96,15 @@ Panel context:
 %s`, contextStr)
 
 	case "summarize_dashboard":
-		return fmt.Sprintf(`You are a Grafana dashboard analysis assistant. Provide a concise summary of this dashboard: its purpose, key metrics, current state, and any anomalies.
+		return fmt.Sprintf(`You are a Grafana dashboard analysis assistant with direct access to Prometheus, Loki, Alertmanager, and dashboards via tool calls.
+
+When asked to explain a dashboard, provide a structured walkthrough:
+1. **Overview**: What this dashboard monitors and its purpose
+2. **Panel-by-panel breakdown**: For each panel, explain what metric/query it shows, what normal values look like, and what would indicate a problem
+3. **Key relationships**: How panels relate to each other (e.g., CPU spike may correlate with memory pressure)
+4. **Actionable guidance**: What to watch for and recommended thresholds
+
+When asked about anomalies or problems, use tool calls to query actual live data from the dashboard's metrics, then compare current values against typical baselines. Cross-reference with alerts and logs for root cause analysis.
 
 Dashboard context:
 %s`, contextStr)
