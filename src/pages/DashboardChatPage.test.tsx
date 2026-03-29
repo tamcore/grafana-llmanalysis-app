@@ -2,12 +2,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { DashboardChatPage } from './DashboardChatPage';
 
 jest.mock('@grafana/ui', () => ({
-  useStyles2: () => ({
-    container: '',
-    subtitle: '',
-    form: '',
-    inputRow: '',
-  }),
+  useStyles2: () =>
+    new Proxy(
+      {},
+      {
+        get: () => '',
+      }
+    ),
   Field: ({ children, label }: any) => (
     <div>
       <label>{label}</label>
@@ -47,8 +48,13 @@ jest.mock('@grafana/ui', () => ({
       {children}
     </div>
   ),
+  IconButton: ({ 'aria-label': label, onClick }: any) => (
+    <button aria-label={label} onClick={onClick} />
+  ),
+  Tooltip: ({ children }: any) => <>{children}</>,
 }));
 
+const mockStorage: Record<string, string> = {};
 jest.mock('@grafana/runtime', () => ({
   getBackendSrv: () => ({
     get: jest.fn().mockImplementation((url: string) => {
@@ -77,6 +83,12 @@ jest.mock('@grafana/runtime', () => ({
     }),
     post: jest.fn().mockResolvedValue({ content: 'Test response', done: true }),
   }),
+  usePluginUserStorage: () => ({
+    getItem: jest.fn(async (key: string) => mockStorage[key] ?? null),
+    setItem: jest.fn(async (key: string, value: string) => {
+      mockStorage[key] = value;
+    }),
+  }),
 }));
 
 describe('DashboardChatPage', () => {
@@ -84,6 +96,11 @@ describe('DashboardChatPage', () => {
     render(<DashboardChatPage />);
     expect(screen.getByTestId('dashboard-chat-page')).toBeInTheDocument();
     expect(screen.getByText('💬 Chat with Dashboard')).toBeInTheDocument();
+  });
+
+  it('shows session sidebar', () => {
+    render(<DashboardChatPage />);
+    expect(screen.getByTestId('session-sidebar')).toBeInTheDocument();
   });
 
   it('loads dashboard list on mount', async () => {

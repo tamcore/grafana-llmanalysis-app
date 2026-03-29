@@ -1,11 +1,13 @@
-import { useState, useCallback, useEffect, FormEvent } from 'react';
+import { useState, useCallback, useEffect, useRef, FormEvent } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
-import { useStyles2, Field, Input, Select, Button, Alert } from '@grafana/ui';
+import { useStyles2, Field, Input, Select, Button, Alert, IconButton, Tooltip } from '@grafana/ui';
 import { getBackendSrv } from '@grafana/runtime';
 import { ChatView, ChatMessage } from '../components/ChatView';
 import { streamChat, sendChat, ChatHistory } from '../api';
 import { AnalysisContext, DashboardContext, DashboardPanelSummary } from '../context';
+import { useChatSessions } from '../hooks/useChatSessions';
+import { ChatSession, ChatSessionContext, generateSessionId, generateTitle } from '../utils/chatStorage';
 
 interface DashboardSearchResult {
   uid: string;
@@ -76,6 +78,7 @@ function buildDashboardChatContext(data: GrafanaDashboard): AnalysisContext {
 
 export function DashboardChatPage() {
   const styles = useStyles2(getStyles);
+  const { sessions, loading: sessionsLoading, loadSession, saveSession, deleteSession, exportSession } = useChatSessions();
 
   const [dashboards, setDashboards] = useState<DashboardSearchResult[]>([]);
   const [selectedUid, setSelectedUid] = useState<string>('');
@@ -89,6 +92,13 @@ export function DashboardChatPage() {
   const [activeToolCalls, setActiveToolCalls] = useState<Array<{ name: string; arguments: string }>>([]);
   const [contextTokens, setContextTokens] = useState(0);
   const [maxTokens, setMaxTokens] = useState(0);
+
+  // Session management
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [showSessions, setShowSessions] = useState(true);
+
+  const sessionIdRef = useRef(currentSessionId);
+  sessionIdRef.current = currentSessionId;
 
   // Fetch dashboard list
   useEffect(() => {
@@ -128,6 +138,90 @@ export function DashboardChatPage() {
     []
   );
 
+  const autoSave = useCallback(
+    async (updatedMessages: ChatMessage[], tokens?: number, maxTok?: number) => {
+      if (updatedMessages.length === 0) {
+        return;
+      }
+
+      const id = sessionIdRef.current || generateSessionId();
+      if (!sessionIdRef.current) {
+        setCurrentSessionId(id);
+        sessionIdRef.current = id;
+      }
+
+      const ctx: ChatSessionContext = { dashboardUid: selectedUid };
+
+      const session: ChatSession = {
+        id,
+        title: generateTitle(updatedMessages),
+        mode: 'dashboard-chat',
+        messages: updatedMessages,
+        context: ctx,
+        contextTokens: tokens ?? contextTokens,
+        maxTokens: maxTok ?? maxTokens,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await saveSession(session);
+    },
+    [selectedUid, contextTokens, maxTokens, saveSession]
+  );
+
+  const startNewChat = useCallback(() => {
+    setCurrentSessionId(null);
+    sessionIdRef.current = null;
+    setMessages([]);
+    setContextTokens(0);
+    setMaxTokens(0);
+    setError(null);
+    setStreamContent('');
+    setActiveToolCalls([]);
+    setDashboardContext(null);
+    setSelectedUid('');
+  }, []);
+
+  const handleLoadSession = useCallback(
+    async (id: string) => {
+      const session = await loadSession(id);
+      if (!session) {
+        return;
+      }
+      setCurrentSessionId(session.id);
+      sessionIdRef.current = session.id;
+      setMessages(session.messages);
+      setContextTokens(session.contextTokens);
+      setMaxTokens(session.maxTokens);
+      setError(null);
+
+      if (session.context.dashboardUid) {
+        setSelectedUid(session.context.dashboardUid);
+        await loadDashboard(session.context.dashboardUid);
+        // Restore messages from session (loadDashboard resets them)
+        setMessages(session.messages);
+      }
+    },
+    [loadSession, loadDashboard]
+  );
+
+  const handleExportSession = useCallback(
+    async (id: string) => {
+      const json = await exportSession(id);
+      if (!json) {
+        return;
+      }
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dashboard-chat-${id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    [exportSession]
+  );
+
   const onSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
@@ -137,7 +231,8 @@ export function DashboardChatPage() {
 
       setError(null);
       const userMessage: ChatMessage = { role: 'user', content: prompt };
-      setMessages((prev) => [...prev, userMessage]);
+      const updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
       setPrompt('');
       setIsStreaming(true);
       setStreamContent('');
@@ -146,13 +241,17 @@ export function DashboardChatPage() {
       const history: ChatHistory[] = messages.map((m) => ({ role: m.role, content: m.content }));
 
       let fullContent = '';
+      let newContextTokens = contextTokens;
+      let newMaxTokens = maxTokens;
       try {
         for await (const chunk of streamChat('summarize_dashboard', userMessage.content, dashboardContext, history)) {
           if (chunk.done) {
             if (chunk.contextTokens) {
+              newContextTokens = chunk.contextTokens;
               setContextTokens(chunk.contextTokens);
             }
             if (chunk.maxTokens) {
+              newMaxTokens = chunk.maxTokens;
               setMaxTokens(chunk.maxTokens);
             }
             break;
@@ -177,96 +276,259 @@ export function DashboardChatPage() {
           }
         }
       } finally {
-        if (fullContent.trim()) {
-          setMessages((prev) => [...prev, { role: 'assistant', content: fullContent }]);
-        }
+        const finalMessages = fullContent.trim()
+          ? [...updatedMessages, { role: 'assistant' as const, content: fullContent }]
+          : updatedMessages;
+        setMessages(finalMessages);
         setIsStreaming(false);
         setStreamContent('');
         setActiveToolCalls([]);
+
+        await autoSave(finalMessages, newContextTokens, newMaxTokens);
       }
     },
-    [prompt, dashboardContext, isStreaming, messages]
+    [prompt, dashboardContext, isStreaming, messages, contextTokens, maxTokens, autoSave]
   );
 
   const dashboardOptions = dashboards.map((d) => ({ label: d.title, value: d.uid }));
+  const dashSessions = sessions.filter((s) => s.mode === 'dashboard-chat');
 
   return (
-    <div data-testid="dashboard-chat-page" className={styles.container}>
-      <h2>💬 Chat with Dashboard</h2>
-      <p className={styles.subtitle}>Select a dashboard and ask questions about its panels, queries, and data.</p>
+    <div data-testid="dashboard-chat-page" className={styles.layout}>
+      {/* Session sidebar */}
+      {showSessions && (
+        <div data-testid="session-sidebar" className={styles.sidebar}>
+          <div className={styles.sidebarHeader}>
+            <h4 className={styles.sidebarTitle}>Sessions</h4>
+            <Tooltip content="New chat">
+              <IconButton name="plus" aria-label="New chat" onClick={startNewChat} size="md" />
+            </Tooltip>
+          </div>
 
-      {error && (
-        <Alert severity="error" title="Error">
-          {error}
-        </Alert>
-      )}
+          {sessionsLoading && <p className={styles.sidebarHint}>Loading...</p>}
 
-      <Field label="Dashboard">
-        <Select
-          options={dashboardOptions}
-          value={dashboardOptions.find((o) => o.value === selectedUid)}
-          onChange={(v) => {
-            if (v.value) {
-              setSelectedUid(v.value);
-              loadDashboard(v.value);
-            }
-          }}
-          placeholder="Select a dashboard..."
-          width={50}
-          isLoading={dashboards.length === 0}
-        />
-      </Field>
+          {!sessionsLoading && dashSessions.length === 0 && (
+            <p className={styles.sidebarHint}>No saved sessions yet</p>
+          )}
 
-      {loading && <p>Loading dashboard...</p>}
-
-      <ChatView messages={messages} isStreaming={isStreaming} streamContent={streamContent} activeToolCalls={activeToolCalls} />
-
-      {maxTokens > 0 && (
-        <div className={styles.tokenBar}>
-          <span className={styles.tokenLabel}>
-            Context: {contextTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
-            ({Math.round((contextTokens / maxTokens) * 100)}%)
-          </span>
-          <div className={styles.tokenTrack}>
-            <div
-              className={styles.tokenFill}
-              style={{
-                width: `${Math.min((contextTokens / maxTokens) * 100, 100)}%`,
-                backgroundColor:
-                  contextTokens / maxTokens > 0.9
-                    ? '#ff4d4f'
-                    : contextTokens / maxTokens > 0.7
-                      ? '#faad14'
-                      : '#52c41a',
-              }}
-            />
+          <div className={styles.sessionList}>
+            {dashSessions.map((s) => (
+              <div
+                key={s.id}
+                data-testid="session-item"
+                className={`${styles.sessionItem} ${s.id === currentSessionId ? styles.sessionActive : ''}`}
+                onClick={() => handleLoadSession(s.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleLoadSession(s.id)}
+              >
+                <div className={styles.sessionTitle}>{s.title}</div>
+                <div className={styles.sessionMeta}>
+                  {s.messageCount} msgs · {new Date(s.updatedAt).toLocaleDateString()}
+                </div>
+                <div className={styles.sessionActions}>
+                  <Tooltip content="Export">
+                    <IconButton
+                      name="download-alt"
+                      aria-label="Export session"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleExportSession(s.id);
+                      }}
+                    />
+                  </Tooltip>
+                  <Tooltip content="Delete">
+                    <IconButton
+                      name="trash-alt"
+                      aria-label="Delete session"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteSession(s.id);
+                        if (currentSessionId === s.id) {
+                          startNewChat();
+                        }
+                      }}
+                    />
+                  </Tooltip>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      <form onSubmit={onSubmit} className={styles.form}>
-        <div className={styles.inputRow}>
-          <Input
-            value={prompt}
-            onChange={(e) => setPrompt(e.currentTarget.value)}
-            placeholder={dashboardContext ? 'Ask about this dashboard...' : 'Select a dashboard first'}
-            disabled={!dashboardContext || isStreaming}
-            width={60}
-          />
-          <Button type="submit" disabled={isStreaming || !prompt.trim() || !dashboardContext}>
-            {isStreaming ? 'Thinking...' : 'Send'}
-          </Button>
+      {/* Main chat area */}
+      <div className={styles.main}>
+        <div className={styles.header}>
+          <Tooltip content={showSessions ? 'Hide sessions' : 'Show sessions'}>
+            <IconButton
+              name={showSessions ? 'angle-double-left' : 'angle-double-right'}
+              aria-label="Toggle sessions"
+              onClick={() => setShowSessions(!showSessions)}
+              size="lg"
+            />
+          </Tooltip>
+          <h2 className={styles.heading}>💬 Chat with Dashboard</h2>
         </div>
-      </form>
+
+        <p className={styles.subtitle}>Select a dashboard and ask questions about its panels, queries, and data.</p>
+
+        {error && (
+          <Alert severity="error" title="Error">
+            {error}
+          </Alert>
+        )}
+
+        <Field label="Dashboard">
+          <Select
+            options={dashboardOptions}
+            value={dashboardOptions.find((o) => o.value === selectedUid)}
+            onChange={(v) => {
+              if (v.value) {
+                setSelectedUid(v.value);
+                loadDashboard(v.value);
+              }
+            }}
+            placeholder="Select a dashboard..."
+            width={50}
+            isLoading={dashboards.length === 0}
+          />
+        </Field>
+
+        {loading && <p>Loading dashboard...</p>}
+
+        <ChatView messages={messages} isStreaming={isStreaming} streamContent={streamContent} activeToolCalls={activeToolCalls} />
+
+        {maxTokens > 0 && (
+          <div className={styles.tokenBar}>
+            <span className={styles.tokenLabel}>
+              Context: {contextTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
+              ({Math.round((contextTokens / maxTokens) * 100)}%)
+            </span>
+            <div className={styles.tokenTrack}>
+              <div
+                className={styles.tokenFill}
+                style={{
+                  width: `${Math.min((contextTokens / maxTokens) * 100, 100)}%`,
+                  backgroundColor:
+                    contextTokens / maxTokens > 0.9
+                      ? '#ff4d4f'
+                      : contextTokens / maxTokens > 0.7
+                        ? '#faad14'
+                        : '#52c41a',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={onSubmit} className={styles.form}>
+          <div className={styles.inputRow}>
+            <Input
+              value={prompt}
+              onChange={(e) => setPrompt(e.currentTarget.value)}
+              placeholder={dashboardContext ? 'Ask about this dashboard...' : 'Select a dashboard first'}
+              disabled={!dashboardContext || isStreaming}
+              width={60}
+            />
+            <Button type="submit" disabled={isStreaming || !prompt.trim() || !dashboardContext}>
+              {isStreaming ? 'Thinking...' : 'Send'}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
 
 function getStyles(theme: GrafanaTheme2) {
   return {
-    container: css({
+    layout: css({
+      display: 'flex',
+      gap: theme.spacing(2),
       padding: theme.spacing(2),
+      height: 'calc(100vh - 80px)',
+      overflow: 'hidden',
+    }),
+    sidebar: css({
+      width: '280px',
+      minWidth: '280px',
+      display: 'flex',
+      flexDirection: 'column',
+      background: theme.colors.background.secondary,
+      borderRadius: theme.shape.radius.default,
+      padding: theme.spacing(1.5),
+      overflowY: 'auto',
+    }),
+    sidebarHeader: css({
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing(1),
+    }),
+    sidebarTitle: css({
+      margin: 0,
+      fontSize: theme.typography.h5.fontSize,
+    }),
+    sidebarHint: css({
+      color: theme.colors.text.secondary,
+      fontSize: theme.typography.bodySmall.fontSize,
+      padding: theme.spacing(1),
+    }),
+    sessionList: css({
+      display: 'flex',
+      flexDirection: 'column',
+      gap: theme.spacing(0.5),
+    }),
+    sessionItem: css({
+      padding: theme.spacing(1),
+      borderRadius: theme.shape.radius.default,
+      cursor: 'pointer',
+      border: `1px solid transparent`,
+      '&:hover': {
+        background: theme.colors.background.canvas,
+        borderColor: theme.colors.border.weak,
+      },
+    }),
+    sessionActive: css({
+      background: theme.colors.background.canvas,
+      borderColor: theme.colors.primary.border,
+    }),
+    sessionTitle: css({
+      fontWeight: theme.typography.fontWeightMedium,
+      fontSize: theme.typography.bodySmall.fontSize,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    }),
+    sessionMeta: css({
+      fontSize: '11px',
+      color: theme.colors.text.secondary,
+      marginTop: '2px',
+    }),
+    sessionActions: css({
+      display: 'flex',
+      gap: theme.spacing(0.5),
+      marginTop: theme.spacing(0.5),
+    }),
+    main: css({
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      minWidth: 0,
       maxWidth: '1000px',
+      overflow: 'hidden',
+    }),
+    header: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1),
+      marginBottom: theme.spacing(0.5),
+    }),
+    heading: css({
+      margin: 0,
     }),
     subtitle: css({
       color: theme.colors.text.secondary,
