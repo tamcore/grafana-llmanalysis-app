@@ -41,6 +41,10 @@ func (te *ToolExecutor) Execute(ctx context.Context, name string, arguments stri
 		return te.queryLoki(ctx, arguments, headers)
 	case "list_datasources":
 		return te.listDatasources(ctx, headers)
+	case "list_dashboards":
+		return te.listDashboards(ctx, arguments, headers)
+	case "get_dashboard":
+		return te.getDashboard(ctx, arguments, headers)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -156,6 +160,176 @@ func (te *ToolExecutor) listDatasources(ctx context.Context, headers map[string]
 
 	out, _ := json.Marshal(summaries)
 	return string(out), nil
+}
+
+func (te *ToolExecutor) listDashboards(ctx context.Context, arguments string, headers map[string]string) (string, error) {
+	var args ListDashboardsArgs
+	if arguments != "" && arguments != "{}" {
+		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+			return "", fmt.Errorf("parse list_dashboards args: %w", err)
+		}
+	}
+
+	apiPath := "/api/search?type=dash-db&limit=100"
+	if args.Query != "" {
+		apiPath += "&query=" + url.QueryEscape(args.Query)
+	}
+
+	body, err := te.doGrafanaRequest(ctx, http.MethodGet, apiPath, nil, headers)
+	if err != nil {
+		return "", err
+	}
+
+	var dashboards []struct {
+		Title string   `json:"title"`
+		UID   string   `json:"uid"`
+		Tags  []string `json:"tags"`
+		URL   string   `json:"url"`
+	}
+	if err := json.Unmarshal([]byte(body), &dashboards); err != nil {
+		return body, nil //nolint:nilerr // Return raw body if parsing fails
+	}
+
+	type dashSummary struct {
+		Title string   `json:"title"`
+		UID   string   `json:"uid"`
+		Tags  []string `json:"tags,omitempty"`
+	}
+	summaries := make([]dashSummary, len(dashboards))
+	for i, d := range dashboards {
+		summaries[i] = dashSummary{Title: d.Title, UID: d.UID, Tags: d.Tags}
+	}
+
+	out, _ := json.Marshal(summaries)
+	return string(out), nil
+}
+
+func (te *ToolExecutor) getDashboard(ctx context.Context, arguments string, headers map[string]string) (string, error) {
+	var args GetDashboardArgs
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return "", fmt.Errorf("parse get_dashboard args: %w", err)
+	}
+	if args.UID == "" {
+		return "", fmt.Errorf("uid is required")
+	}
+
+	apiPath := "/api/dashboards/uid/" + url.PathEscape(args.UID)
+	body, err := te.doGrafanaRequest(ctx, http.MethodGet, apiPath, nil, headers)
+	if err != nil {
+		return "", err
+	}
+
+	// Extract a compact summary: title, panels with queries
+	var raw struct {
+		Dashboard json.RawMessage `json:"dashboard"`
+	}
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		return truncateString(body, 50000), nil
+	}
+
+	var dash struct {
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
+		Panels      []struct {
+			Title   string `json:"title"`
+			Type    string `json:"type"`
+			Targets []struct {
+				Expr  string `json:"expr"`
+				Query string `json:"query"`
+				RefID string `json:"refId"`
+			} `json:"targets"`
+			Panels []struct {
+				Title   string `json:"title"`
+				Type    string `json:"type"`
+				Targets []struct {
+					Expr  string `json:"expr"`
+					Query string `json:"query"`
+					RefID string `json:"refId"`
+				} `json:"targets"`
+			} `json:"panels"`
+		} `json:"panels"`
+		Templating struct {
+			List []struct {
+				Name    string `json:"name"`
+				Current struct {
+					Text  string `json:"text"`
+					Value string `json:"value"`
+				} `json:"current"`
+			} `json:"list"`
+		} `json:"templating"`
+	}
+	if err := json.Unmarshal(raw.Dashboard, &dash); err != nil {
+		return truncateString(body, 50000), nil
+	}
+
+	type panelSummary struct {
+		Title   string   `json:"title"`
+		Type    string   `json:"type"`
+		Queries []string `json:"queries,omitempty"`
+	}
+	var panels []panelSummary
+	for _, p := range dash.Panels {
+		ps := panelSummary{Title: p.Title, Type: p.Type}
+		for _, t := range p.Targets {
+			q := t.Expr
+			if q == "" {
+				q = t.Query
+			}
+			if q != "" {
+				ps.Queries = append(ps.Queries, q)
+			}
+		}
+		if len(ps.Queries) > 0 || ps.Title != "" {
+			panels = append(panels, ps)
+		}
+		// Nested panels (rows)
+		for _, np := range p.Panels {
+			nps := panelSummary{Title: np.Title, Type: np.Type}
+			for _, t := range np.Targets {
+				q := t.Expr
+				if q == "" {
+					q = t.Query
+				}
+				if q != "" {
+					nps.Queries = append(nps.Queries, q)
+				}
+			}
+			if len(nps.Queries) > 0 || nps.Title != "" {
+				panels = append(panels, nps)
+			}
+		}
+	}
+
+	type variable struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	}
+	var vars []variable
+	for _, v := range dash.Templating.List {
+		val := v.Current.Value
+		if val == "" {
+			val = v.Current.Text
+		}
+		vars = append(vars, variable{Name: v.Name, Value: val})
+	}
+
+	summary := struct {
+		Title       string         `json:"title"`
+		Description string         `json:"description,omitempty"`
+		Tags        []string       `json:"tags,omitempty"`
+		Variables   []variable     `json:"variables,omitempty"`
+		Panels      []panelSummary `json:"panels"`
+	}{
+		Title:       dash.Title,
+		Description: dash.Description,
+		Tags:        dash.Tags,
+		Variables:   vars,
+		Panels:      panels,
+	}
+
+	out, _ := json.Marshal(summary)
+	return truncateString(string(out), 50000), nil
 }
 
 func (te *ToolExecutor) findDatasource(ctx context.Context, headers map[string]string, dsType string) (string, error) {

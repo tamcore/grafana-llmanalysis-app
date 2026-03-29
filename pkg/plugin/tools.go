@@ -79,6 +79,40 @@ func llmTools() []openai.Tool {
 				}`),
 			},
 		},
+		{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "list_dashboards",
+				Description: "List all Grafana dashboards with their titles, UIDs, and tags. Use this to discover available dashboards.",
+				Parameters: json.RawMessage(`{
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Optional search query to filter dashboards by name. Leave empty to list all."
+						}
+					},
+					"required": []
+				}`),
+			},
+		},
+		{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "get_dashboard",
+				Description: "Get a Grafana dashboard's full structure including all panels, queries, and variables. Use this to understand what a dashboard monitors before querying its metrics.",
+				Parameters: json.RawMessage(`{
+					"type": "object",
+					"properties": {
+						"uid": {
+							"type": "string",
+							"description": "Dashboard UID (from list_dashboards result)"
+						}
+					},
+					"required": ["uid"]
+				}`),
+			},
+		},
 	}
 }
 
@@ -95,4 +129,14 @@ type LokiQueryArgs struct {
 	Start string `json:"start,omitempty"`
 	End   string `json:"end,omitempty"`
 	Limit int    `json:"limit,omitempty"`
+}
+
+// ListDashboardsArgs holds parsed arguments for list_dashboards.
+type ListDashboardsArgs struct {
+	Query string `json:"query,omitempty"`
+}
+
+// GetDashboardArgs holds parsed arguments for get_dashboard.
+type GetDashboardArgs struct {
+	UID string `json:"uid"`
 }

@@ -9,14 +9,16 @@ func TestLLMTools_ReturnsExpectedTools(t *testing.T) {
 	t.Parallel()
 
 	tools := llmTools()
-	if len(tools) != 3 {
-		t.Fatalf("expected 3 tools, got %d", len(tools))
+	if len(tools) != 5 {
+		t.Fatalf("expected 5 tools, got %d", len(tools))
 	}
 
 	expected := map[string]bool{
 		"query_prometheus": false,
 		"query_loki":       false,
 		"list_datasources": false,
+		"list_dashboards":  false,
+		"get_dashboard":    false,
 	}
 
 	for _, tool := range tools {
@@ -124,5 +126,33 @@ func TestLokiQueryArgs_Unmarshal(t *testing.T) {
 	}
 	if args.Limit != 50 {
 		t.Errorf("limit = %d", args.Limit)
+	}
+}
+
+func TestListDashboardsArgs_Unmarshal(t *testing.T) {
+	t.Parallel()
+
+	input := `{"query":"kubernetes"}`
+	var args ListDashboardsArgs
+	if err := json.Unmarshal([]byte(input), &args); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if args.Query != "kubernetes" {
+		t.Errorf("query = %q", args.Query)
+	}
+}
+
+func TestGetDashboardArgs_Unmarshal(t *testing.T) {
+	t.Parallel()
+
+	input := `{"uid":"abc-123"}`
+	var args GetDashboardArgs
+	if err := json.Unmarshal([]byte(input), &args); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if args.UID != "abc-123" {
+		t.Errorf("uid = %q", args.UID)
 	}
 }

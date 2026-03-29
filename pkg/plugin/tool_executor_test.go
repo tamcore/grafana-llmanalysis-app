@@ -173,3 +173,177 @@ func TestTruncateString(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestToolExecutor_ListDashboards(t *testing.T) {
+	t.Parallel()
+
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/search" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("type") != "dash-db" {
+			t.Errorf("expected type=dash-db, got %s", r.URL.Query().Get("type"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"title": "Kubernetes Overview", "uid": "k8s-001", "tags": []string{"kubernetes"}, "url": "/d/k8s-001"},
+			{"title": "Node Metrics", "uid": "node-001", "tags": []string{"node"}, "url": "/d/node-001"},
+		})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	result, err := te.Execute(context.Background(), "list_dashboards", "{}", nil)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	var dashboards []struct {
+		Title string   `json:"title"`
+		UID   string   `json:"uid"`
+		Tags  []string `json:"tags"`
+	}
+	if err := json.Unmarshal([]byte(result), &dashboards); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	if len(dashboards) != 2 {
+		t.Fatalf("expected 2 dashboards, got %d", len(dashboards))
+	}
+	if dashboards[0].Title != "Kubernetes Overview" || dashboards[0].UID != "k8s-001" {
+		t.Errorf("unexpected first dashboard: %+v", dashboards[0])
+	}
+	if len(dashboards[0].Tags) != 1 || dashboards[0].Tags[0] != "kubernetes" {
+		t.Errorf("unexpected tags: %v", dashboards[0].Tags)
+	}
+}
+
+func TestToolExecutor_ListDashboardsWithQuery(t *testing.T) {
+	t.Parallel()
+
+	var receivedQuery string
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedQuery = r.URL.Query().Get("query")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	_, err := te.Execute(context.Background(), "list_dashboards", `{"query":"kubernetes"}`, nil)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if receivedQuery != "kubernetes" {
+		t.Errorf("expected query=kubernetes, got %q", receivedQuery)
+	}
+}
+
+func TestToolExecutor_GetDashboard(t *testing.T) {
+	t.Parallel()
+
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/dashboards/uid/k8s-001" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"dashboard": map[string]interface{}{
+				"title":       "Kubernetes Overview",
+				"description": "Cluster overview dashboard",
+				"tags":        []string{"kubernetes"},
+				"panels": []map[string]interface{}{
+					{
+						"title": "CPU Usage",
+						"type":  "timeseries",
+						"targets": []map[string]interface{}{
+							{"expr": "rate(node_cpu_seconds_total[5m])", "refId": "A"},
+						},
+					},
+					{
+						"title": "Row: Storage",
+						"type":  "row",
+						"panels": []map[string]interface{}{
+							{
+								"title": "Disk Usage",
+								"type":  "gauge",
+								"targets": []map[string]interface{}{
+									{"expr": "node_filesystem_avail_bytes", "refId": "A"},
+								},
+							},
+						},
+					},
+				},
+				"templating": map[string]interface{}{
+					"list": []map[string]interface{}{
+						{"name": "namespace", "current": map[string]string{"text": "default", "value": "default"}},
+					},
+				},
+			},
+		})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	result, err := te.Execute(context.Background(), "get_dashboard", `{"uid":"k8s-001"}`, nil)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	var summary struct {
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
+		Variables   []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"variables"`
+		Panels []struct {
+			Title   string   `json:"title"`
+			Type    string   `json:"type"`
+			Queries []string `json:"queries"`
+		} `json:"panels"`
+	}
+	if err := json.Unmarshal([]byte(result), &summary); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	if summary.Title != "Kubernetes Overview" {
+		t.Errorf("expected title 'Kubernetes Overview', got %q", summary.Title)
+	}
+	if summary.Description != "Cluster overview dashboard" {
+		t.Errorf("expected description, got %q", summary.Description)
+	}
+	// Should have 3 panels: CPU Usage, Row: Storage, Disk Usage (nested)
+	if len(summary.Panels) != 3 {
+		t.Fatalf("expected 3 panels, got %d", len(summary.Panels))
+	}
+	if summary.Panels[0].Title != "CPU Usage" {
+		t.Errorf("expected first panel 'CPU Usage', got %q", summary.Panels[0].Title)
+	}
+	if len(summary.Panels[0].Queries) != 1 || summary.Panels[0].Queries[0] != "rate(node_cpu_seconds_total[5m])" {
+		t.Errorf("unexpected queries: %v", summary.Panels[0].Queries)
+	}
+	// Nested panel
+	if summary.Panels[2].Title != "Disk Usage" {
+		t.Errorf("expected nested panel 'Disk Usage', got %q", summary.Panels[2].Title)
+	}
+	// Variables
+	if len(summary.Variables) != 1 || summary.Variables[0].Name != "namespace" {
+		t.Errorf("unexpected variables: %v", summary.Variables)
+	}
+}
+
+func TestToolExecutor_GetDashboard_MissingUID(t *testing.T) {
+	t.Parallel()
+
+	te := NewToolExecutor("http://localhost:1", log.DefaultLogger)
+	_, err := te.Execute(context.Background(), "get_dashboard", `{}`, nil)
+	if err == nil {
+		t.Fatal("expected error for missing UID")
+	}
+}
