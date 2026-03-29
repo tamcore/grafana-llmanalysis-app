@@ -4,8 +4,18 @@ import { PLUGIN_ID } from '../constants';
 
 const RESOURCE_BASE = `/api/plugins/${PLUGIN_ID}/resources`;
 
-export async function sendChat(mode: AnalysisMode, prompt: string, context: AnalysisContext): Promise<ChatResponse> {
-  const request: ChatRequest = { mode, prompt, context };
+export interface ChatHistory {
+  role: string;
+  content: string;
+}
+
+export async function sendChat(
+  mode: AnalysisMode,
+  prompt: string,
+  context: AnalysisContext,
+  messages?: ChatHistory[]
+): Promise<ChatResponse> {
+  const request: ChatRequest = { mode, prompt, context, messages };
   return getBackendSrv().post(`${RESOURCE_BASE}/chat`, request);
 }
 
@@ -16,9 +26,10 @@ export async function testConnection(): Promise<{ status: string; message: strin
 export async function* streamChat(
   mode: AnalysisMode,
   prompt: string,
-  context: AnalysisContext
+  context: AnalysisContext,
+  messages?: ChatHistory[]
 ): AsyncGenerator<ChatResponse> {
-  const request: ChatRequest = { mode, prompt, context };
+  const request: ChatRequest = { mode, prompt, context, messages };
 
   const response = await fetch(`${RESOURCE_BASE}/chat/stream`, {
     method: 'POST',

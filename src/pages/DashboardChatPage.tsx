@@ -4,7 +4,7 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, Field, Input, Select, Button, Alert } from '@grafana/ui';
 import { getBackendSrv } from '@grafana/runtime';
 import { ChatView, ChatMessage } from '../components/ChatView';
-import { streamChat, sendChat } from '../api';
+import { streamChat, sendChat, ChatHistory } from '../api';
 import { AnalysisContext, DashboardContext, DashboardPanelSummary } from '../context';
 
 interface DashboardSearchResult {
@@ -87,6 +87,8 @@ export function DashboardChatPage() {
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [activeToolCalls, setActiveToolCalls] = useState<Array<{ name: string; arguments: string }>>([]);
+  const [contextTokens, setContextTokens] = useState(0);
+  const [maxTokens, setMaxTokens] = useState(0);
 
   // Fetch dashboard list
   useEffect(() => {
@@ -141,10 +143,18 @@ export function DashboardChatPage() {
       setStreamContent('');
       setActiveToolCalls([]);
 
+      const history: ChatHistory[] = messages.map((m) => ({ role: m.role, content: m.content }));
+
       let fullContent = '';
       try {
-        for await (const chunk of streamChat('summarize_dashboard', userMessage.content, dashboardContext)) {
+        for await (const chunk of streamChat('summarize_dashboard', userMessage.content, dashboardContext, history)) {
           if (chunk.done) {
+            if (chunk.contextTokens) {
+              setContextTokens(chunk.contextTokens);
+            }
+            if (chunk.maxTokens) {
+              setMaxTokens(chunk.maxTokens);
+            }
             break;
           }
           if (chunk.toolCall) {
@@ -157,7 +167,7 @@ export function DashboardChatPage() {
       } catch {
         if (!fullContent.trim()) {
           try {
-            const resp = await sendChat('summarize_dashboard', userMessage.content, dashboardContext);
+            const resp = await sendChat('summarize_dashboard', userMessage.content, dashboardContext, history);
             if (resp.content?.trim()) {
               fullContent = resp.content;
             }
@@ -175,7 +185,7 @@ export function DashboardChatPage() {
         setActiveToolCalls([]);
       }
     },
-    [prompt, dashboardContext, isStreaming]
+    [prompt, dashboardContext, isStreaming, messages]
   );
 
   const dashboardOptions = dashboards.map((d) => ({ label: d.title, value: d.uid }));
@@ -210,6 +220,29 @@ export function DashboardChatPage() {
       {loading && <p>Loading dashboard...</p>}
 
       <ChatView messages={messages} isStreaming={isStreaming} streamContent={streamContent} activeToolCalls={activeToolCalls} />
+
+      {maxTokens > 0 && (
+        <div className={styles.tokenBar}>
+          <span className={styles.tokenLabel}>
+            Context: {contextTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
+            ({Math.round((contextTokens / maxTokens) * 100)}%)
+          </span>
+          <div className={styles.tokenTrack}>
+            <div
+              className={styles.tokenFill}
+              style={{
+                width: `${Math.min((contextTokens / maxTokens) * 100, 100)}%`,
+                backgroundColor:
+                  contextTokens / maxTokens > 0.9
+                    ? '#ff4d4f'
+                    : contextTokens / maxTokens > 0.7
+                      ? '#faad14'
+                      : '#52c41a',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <form onSubmit={onSubmit} className={styles.form}>
         <div className={styles.inputRow}>
@@ -249,6 +282,31 @@ function getStyles(theme: GrafanaTheme2) {
       display: 'flex',
       gap: theme.spacing(1),
       alignItems: 'flex-start',
+    }),
+    tokenBar: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1.5),
+      marginTop: theme.spacing(1),
+      padding: `${theme.spacing(0.5)} ${theme.spacing(1.5)}`,
+      fontSize: theme.typography.bodySmall.fontSize,
+      color: theme.colors.text.secondary,
+    }),
+    tokenLabel: css({
+      whiteSpace: 'nowrap',
+    }),
+    tokenTrack: css({
+      flex: 1,
+      height: '6px',
+      borderRadius: '3px',
+      background: theme.colors.background.canvas,
+      overflow: 'hidden',
+      maxWidth: '200px',
+    }),
+    tokenFill: css({
+      height: '100%',
+      borderRadius: '3px',
+      transition: 'width 0.3s ease',
     }),
   };
 }

@@ -72,6 +72,7 @@ export interface ChatRequest {
   mode: AnalysisMode;
   prompt: string;
   context: AnalysisContext;
+  messages?: Array<{ role: string; content: string }>;
 }
 
 export interface ToolCallInfo {
@@ -87,4 +88,6 @@ export interface ChatResponse {
     completion_tokens: number;
   };
   toolCall?: ToolCallInfo;
+  contextTokens?: number;
+  maxTokens?: number;
 }

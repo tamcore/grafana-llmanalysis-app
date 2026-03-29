@@ -4,7 +4,7 @@ import { GrafanaTheme2, SelectableValue } from '@grafana/data';
 import { getBackendSrv } from '@grafana/runtime';
 import { useStyles2, Field, Input, Button, Alert, MultiSelect, Switch, InlineField } from '@grafana/ui';
 import { ChatView, ChatMessage } from '../components/ChatView';
-import { streamChat, sendChat } from '../api';
+import { streamChat, sendChat, ChatHistory } from '../api';
 import { AnalysisContext } from '../context';
 
 interface Datasource {
@@ -28,6 +28,10 @@ export function ChatPage() {
   const [streamContent, setStreamContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [activeToolCalls, setActiveToolCalls] = useState<Array<{ name: string; arguments: string }>>([]);
+
+  // Token tracking
+  const [contextTokens, setContextTokens] = useState(0);
+  const [maxTokens, setMaxTokens] = useState(0);
 
   // Context selectors
   const [datasources, setDatasources] = useState<Datasource[]>([]);
@@ -103,14 +107,23 @@ export function ChatPage() {
 
       const context = buildContext();
 
+      // Build conversation history from existing messages for multi-turn context.
+      const history: ChatHistory[] = messages.map((m) => ({ role: m.role, content: m.content }));
+
       setIsStreaming(true);
       setStreamContent('');
       setActiveToolCalls([]);
 
       let fullContent = '';
       try {
-        for await (const chunk of streamChat('chat', userMessage.content, context)) {
+        for await (const chunk of streamChat('chat', userMessage.content, context, history)) {
           if (chunk.done) {
+            if (chunk.contextTokens) {
+              setContextTokens(chunk.contextTokens);
+            }
+            if (chunk.maxTokens) {
+              setMaxTokens(chunk.maxTokens);
+            }
             break;
           }
           if (chunk.toolCall) {
@@ -126,7 +139,7 @@ export function ChatPage() {
           const message = err instanceof Error ? err.message : 'Unknown error';
           setError(message);
           try {
-            const resp = await sendChat('chat', userMessage.content, buildContext());
+            const resp = await sendChat('chat', userMessage.content, buildContext(), history);
             if (resp.content?.trim()) {
               fullContent = resp.content;
               setError(null);
@@ -145,7 +158,7 @@ export function ChatPage() {
         setActiveToolCalls([]);
       }
     },
-    [prompt, isStreaming, buildContext]
+    [prompt, isStreaming, buildContext, messages]
   );
 
   return (
@@ -195,6 +208,29 @@ export function ChatPage() {
 
       <ChatView messages={messages} isStreaming={isStreaming} streamContent={streamContent} activeToolCalls={activeToolCalls} />
 
+      {maxTokens > 0 && (
+        <div className={styles.tokenBar}>
+          <span className={styles.tokenLabel}>
+            Context: {contextTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
+            ({Math.round((contextTokens / maxTokens) * 100)}%)
+          </span>
+          <div className={styles.tokenTrack}>
+            <div
+              className={styles.tokenFill}
+              style={{
+                width: `${Math.min((contextTokens / maxTokens) * 100, 100)}%`,
+                backgroundColor:
+                  contextTokens / maxTokens > 0.9
+                    ? '#ff4d4f'
+                    : contextTokens / maxTokens > 0.7
+                      ? '#faad14'
+                      : '#52c41a',
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <form onSubmit={onSubmit} className={styles.form}>
         <Field label="Message">
           <Input
@@ -241,6 +277,31 @@ function getStyles(theme: GrafanaTheme2) {
       padding: theme.spacing(2),
       background: theme.colors.background.secondary,
       borderRadius: theme.shape.radius.default,
+    }),
+    tokenBar: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1.5),
+      marginTop: theme.spacing(1),
+      padding: `${theme.spacing(0.5)} ${theme.spacing(1.5)}`,
+      fontSize: theme.typography.bodySmall.fontSize,
+      color: theme.colors.text.secondary,
+    }),
+    tokenLabel: css({
+      whiteSpace: 'nowrap',
+    }),
+    tokenTrack: css({
+      flex: 1,
+      height: '6px',
+      borderRadius: '3px',
+      background: theme.colors.background.canvas,
+      overflow: 'hidden',
+      maxWidth: '200px',
+    }),
+    tokenFill: css({
+      height: '100%',
+      borderRadius: '3px',
+      transition: 'width 0.3s ease',
     }),
   };
 }
