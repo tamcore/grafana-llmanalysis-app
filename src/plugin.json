@@ -22,11 +22,18 @@
   "includes": [
     {
       "type": "page",
-      "name": "Analyze",
-      "path": "/a/tamcore-llmanalysis-app/analyze",
+      "name": "Chat",
+      "path": "/a/tamcore-llmanalysis-app/chat",
       "role": "Viewer",
       "addToNav": true,
       "defaultNav": true
+    },
+    {
+      "type": "page",
+      "name": "Analyze",
+      "path": "/a/tamcore-llmanalysis-app/analyze",
+      "role": "Viewer",
+      "addToNav": true
     },
     {
       "type": "page",

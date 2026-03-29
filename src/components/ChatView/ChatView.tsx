@@ -38,6 +38,8 @@ const toolNameLabels: Record<string, string> = {
   query_prometheus: '📊 Querying Prometheus',
   query_loki: '📋 Querying Loki',
   list_datasources: '🔍 Listing datasources',
+  list_dashboards: '📋 Listing dashboards',
+  get_dashboard: '📊 Inspecting dashboard',
 };
 
 function ToolCallBadge({ name, arguments: args }: ToolCallStatus) {

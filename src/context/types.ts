@@ -1,5 +1,5 @@
 /** Analysis mode types matching the backend API contract. */
-export type AnalysisMode = 'explain_panel' | 'summarize_dashboard' | 'analyze_logs' | 'analyze_metrics';
+export type AnalysisMode = 'chat' | 'explain_panel' | 'summarize_dashboard' | 'analyze_logs' | 'analyze_metrics';
 
 export interface TimeRange {
   from: string;
@@ -63,6 +63,9 @@ export interface AnalysisContext {
   dashboard?: DashboardContext;
   logs?: LogsContext;
   metrics?: MetricsContext;
+  datasources?: Array<{ name: string; type: string; uid: string }>;
+  dashboards?: Array<{ title: string; uid: string }>;
+  autoDiscovery?: boolean;
 }
 
 export interface ChatRequest {

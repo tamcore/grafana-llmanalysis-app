@@ -1,7 +1,7 @@
 import { AppPlugin, AppRootProps, PluginExtensionPanelContext } from '@grafana/data';
 import React from 'react';
 import { AppConfig } from './components/AppConfig';
-import { AnalyzePage, DashboardChatPage } from './pages';
+import { AnalyzePage, DashboardChatPage, ChatPage } from './pages';
 import { PanelAnalysisModal, ExploreAnalysisModal } from './extensions/AnalysisModal';
 import { PLUGIN_ID } from './constants';
 
@@ -12,6 +12,9 @@ const COMMAND_PALETTE_TARGET = 'grafana/commandpalette/action';
 
 function AppRoot(props: AppRootProps) {
   const path = props.path || window.location.pathname;
+  if (path.includes('chat') && !path.includes('dashboard-chat')) {
+    return <ChatPage />;
+  }
   if (path.includes('dashboard-chat')) {
     return <DashboardChatPage />;
   }
