@@ -13,7 +13,7 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
-const maxToolRounds = 5
+const maxToolRounds = 10
 
 // streamChatCompletion sends a streaming chat completion request with tool-calling
 // support and relays chunks via the sender.
@@ -84,7 +84,14 @@ func (a *App) streamChatCompletion(ctx context.Context, req ChatRequest, sender 
 		return a.streamFinalResponse(ctx, client, messages, tools, sender)
 	}
 
-	return fmt.Errorf("exceeded maximum tool-calling rounds (%d)", maxToolRounds)
+	// Tool-calling limit reached — ask the LLM to produce a final answer
+	// without tools so the user always gets a response.
+	a.logger.Warn("Tool-calling round limit reached, requesting final summary", "maxRounds", maxToolRounds)
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleSystem,
+		Content: "You have reached the maximum number of tool calls. Please provide your best answer now based on the data you have already collected. Do not attempt any more tool calls.",
+	})
+	return a.streamFinalResponse(ctx, client, messages, nil, sender)
 }
 
 // streamFinalResponse re-issues the request as a stream to get the final content response.
