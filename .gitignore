@@ -1,0 +1,7 @@
+.envrc
+.enrvrc
+node_modules/
+dist/
+coverage/
+.eslintcache
+*.local

@@ -1,0 +1,12 @@
+version: "2"
+run:
+  go: "1.22"
+linters:
+  default: standard
+  enable:
+    - gofmt
+    - govet
+issues:
+  exclude-dirs:
+    - node_modules
+    - dist

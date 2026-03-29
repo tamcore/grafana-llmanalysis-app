@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "app",
+  "name": "LLM Analysis",
+  "id": "tamcore-llmanalysis-app",
+  "backend": true,
+  "executable": "gpx_llmanalysis",
+  "info": {
+    "keywords": ["llm", "ai", "analysis", "openai", "prometheus", "loki"],
+    "description": "Wire OpenAI-compatible LLM endpoints into Grafana for dashboard, metric, and log analysis.",
+    "author": {
+      "name": "tamcore"
+    },
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "includes": [
+    {
+      "type": "page",
+      "name": "Analyze",
+      "path": "/a/tamcore-llmanalysis-app/analyze",
+      "role": "Viewer",
+      "addToNav": true,
+      "defaultNav": true
+    },
+    {
+      "type": "page",
+      "name": "Configuration",
+      "path": "/plugins/tamcore-llmanalysis-app",
+      "role": "Admin",
+      "addToNav": true
+    }
+  ],
+  "dependencies": {
+    "grafanaDependency": ">=10.0.0",
+    "plugins": []
+  }
+}
