@@ -71,7 +71,7 @@ function getStyles(theme: GrafanaTheme2) {
       flexDirection: 'column',
       gap: theme.spacing(1),
       padding: theme.spacing(2),
-      maxHeight: '600px',
+      maxHeight: '70vh',
       overflowY: 'auto',
     }),
     userMessage: css({
@@ -87,7 +87,8 @@ function getStyles(theme: GrafanaTheme2) {
       backgroundColor: theme.colors.background.canvas,
       border: `1px solid ${theme.colors.border.weak}`,
       alignSelf: 'flex-start',
-      maxWidth: '90%',
+      maxWidth: '100%',
+      width: '100%',
     }),
     role: css({
       fontWeight: theme.typography.fontWeightBold,
@@ -126,13 +127,17 @@ function getStyles(theme: GrafanaTheme2) {
       },
       '& table': {
         borderCollapse: 'collapse',
-        width: '100%',
         margin: `${theme.spacing(1)} 0`,
+        display: 'block',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
       },
       '& th, & td': {
         border: `1px solid ${theme.colors.border.weak}`,
         padding: `${theme.spacing(0.5)} ${theme.spacing(1)}`,
         textAlign: 'left',
+        whiteSpace: 'normal',
+        minWidth: '80px',
       },
       '& th': {
         backgroundColor: theme.colors.background.secondary,
