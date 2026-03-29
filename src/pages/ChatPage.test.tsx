@@ -2,12 +2,13 @@ import { render, screen } from '@testing-library/react';
 import { ChatPage } from './ChatPage';
 
 jest.mock('@grafana/ui', () => ({
-  useStyles2: () => ({
-    container: '',
-    subtitle: '',
-    form: '',
-    contextBar: '',
-  }),
+  useStyles2: () =>
+    new Proxy(
+      {},
+      {
+        get: () => '',
+      }
+    ),
   Field: ({ children, label }: any) => (
     <div>
       <label>{label}</label>
@@ -46,8 +47,13 @@ jest.mock('@grafana/ui', () => ({
       {children}
     </div>
   ),
+  IconButton: ({ 'aria-label': label, onClick }: any) => (
+    <button aria-label={label} onClick={onClick} />
+  ),
+  Tooltip: ({ children }: any) => <>{children}</>,
 }));
 
+const mockStorage: Record<string, string> = {};
 jest.mock('@grafana/runtime', () => ({
   getBackendSrv: () => ({
     get: jest.fn().mockImplementation((url: string) => {
@@ -66,6 +72,12 @@ jest.mock('@grafana/runtime', () => ({
     }),
     post: jest.fn().mockResolvedValue({ content: 'Test response', done: true }),
   }),
+  usePluginUserStorage: () => ({
+    getItem: jest.fn(async (key: string) => mockStorage[key] ?? null),
+    setItem: jest.fn(async (key: string, value: string) => {
+      mockStorage[key] = value;
+    }),
+  }),
 }));
 
 describe('ChatPage', () => {
@@ -73,6 +85,17 @@ describe('ChatPage', () => {
     render(<ChatPage />);
     expect(screen.getByTestId('chat-page')).toBeInTheDocument();
     expect(screen.getByText('Chat')).toBeInTheDocument();
+  });
+
+  it('shows session sidebar', () => {
+    render(<ChatPage />);
+    expect(screen.getByTestId('session-sidebar')).toBeInTheDocument();
+    expect(screen.getByText('Sessions')).toBeInTheDocument();
+  });
+
+  it('shows new chat button', () => {
+    render(<ChatPage />);
+    expect(screen.getByLabelText('New chat')).toBeInTheDocument();
   });
 
   it('shows auto-discovery switch enabled by default', () => {
