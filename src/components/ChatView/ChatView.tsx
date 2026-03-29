@@ -41,6 +41,7 @@ const toolNameLabels: Record<string, string> = {
   list_dashboards: '📋 Listing dashboards',
   get_dashboard: '📊 Inspecting dashboard',
   list_alerts: '🚨 Checking alerts',
+  list_alert_rules: '📏 Loading alert rules',
 };
 
 function extractToolDetail(name: string, args: string): string {

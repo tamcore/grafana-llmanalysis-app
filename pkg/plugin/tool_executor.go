@@ -47,6 +47,8 @@ func (te *ToolExecutor) Execute(ctx context.Context, name string, arguments stri
 		return te.getDashboard(ctx, arguments, headers)
 	case "list_alerts":
 		return te.listAlerts(ctx, arguments, headers)
+	case "list_alert_rules":
+		return te.listAlertRules(ctx, headers)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -384,6 +386,10 @@ func (te *ToolExecutor) listAlerts(ctx context.Context, arguments string, header
 	}
 
 	return truncateString(body, 50000), nil
+}
+
+func (te *ToolExecutor) listAlertRules(ctx context.Context, headers map[string]string) (string, error) {
+	return te.doGrafanaRequest(ctx, http.MethodGet, "/api/ruler/grafana/api/v1/rules", nil, headers)
 }
 
 func (te *ToolExecutor) findDatasource(ctx context.Context, headers map[string]string, dsType string) (string, error) {

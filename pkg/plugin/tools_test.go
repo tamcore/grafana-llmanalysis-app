@@ -9,8 +9,8 @@ func TestLLMTools_ReturnsExpectedTools(t *testing.T) {
 	t.Parallel()
 
 	tools := llmTools()
-	if len(tools) != 6 {
-		t.Fatalf("expected 6 tools, got %d", len(tools))
+	if len(tools) != 7 {
+		t.Fatalf("expected 7 tools, got %d", len(tools))
 	}
 
 	expected := map[string]bool{
@@ -20,6 +20,7 @@ func TestLLMTools_ReturnsExpectedTools(t *testing.T) {
 		"list_dashboards":  false,
 		"get_dashboard":    false,
 		"list_alerts":      false,
+		"list_alert_rules": false,
 	}
 
 	for _, tool := range tools {

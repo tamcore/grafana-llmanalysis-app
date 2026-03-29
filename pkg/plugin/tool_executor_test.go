@@ -441,3 +441,51 @@ func TestToolExecutor_ListAlerts_NoAlertmanager(t *testing.T) {
 		t.Fatal("expected error when no alertmanager found")
 	}
 }
+
+func TestToolExecutor_ListAlertRules(t *testing.T) {
+	t.Parallel()
+
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/ruler/grafana/api/v1/rules" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string][]map[string]interface{}{
+			"default": {
+				{
+					"name": "HighCPU",
+					"rules": []map[string]interface{}{
+						{
+							"alert":  "HighCPU",
+							"expr":   "rate(node_cpu_seconds_total[5m]) > 0.9",
+							"labels": map[string]string{"severity": "critical"},
+							"annotations": map[string]string{
+								"summary":     "CPU usage high",
+								"description": "Node CPU exceeds 90%",
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	result, err := te.Execute(context.Background(), "list_alert_rules", `{}`, nil)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if result == "" {
+		t.Fatal("expected non-empty result")
+	}
+
+	// Verify it's valid JSON
+	var parsed interface{}
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("result is not valid JSON: %v", err)
+	}
+}

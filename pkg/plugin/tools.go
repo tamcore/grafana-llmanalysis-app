@@ -134,6 +134,18 @@ func llmTools() []openai.Tool {
 				}`),
 			},
 		},
+		{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "list_alert_rules",
+				Description: "List all configured Grafana alert rules with their expressions, labels, and annotations. Use this to understand what alerting conditions are defined and investigate why alerts fired.",
+				Parameters: json.RawMessage(`{
+					"type": "object",
+					"properties": {},
+					"required": []
+				}`),
+			},
+		},
 	}
 }
 
@@ -166,4 +178,9 @@ type GetDashboardArgs struct {
 type ListAlertsArgs struct {
 	Filter string `json:"filter,omitempty"`
 	State  string `json:"state,omitempty"`
+}
+
+// ListAlertRulesArgs holds parsed arguments for list_alert_rules.
+type ListAlertRulesArgs struct {
+	// No required parameters — returns all alert rules
 }
