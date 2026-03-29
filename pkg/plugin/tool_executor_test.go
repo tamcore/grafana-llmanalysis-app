@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"time"
 )
 
@@ -26,7 +28,7 @@ func TestToolExecutor_ListDatasources(t *testing.T) {
 	}))
 	defer grafanaMock.Close()
 
-	te := NewToolExecutor(grafanaMock.URL)
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
 	result, err := te.Execute(context.Background(), "list_datasources", "{}", nil)
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
@@ -83,7 +85,7 @@ func TestToolExecutor_QueryPrometheus(t *testing.T) {
 	}))
 	defer grafanaMock.Close()
 
-	te := NewToolExecutor(grafanaMock.URL)
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
 	args := `{"query":"rate(node_cpu_seconds_total[5m])","step":"60s"}`
 	result, err := te.Execute(context.Background(), "query_prometheus", args, nil)
 	if err != nil {
@@ -108,7 +110,7 @@ func TestToolExecutor_QueryPrometheus(t *testing.T) {
 func TestToolExecutor_UnknownTool(t *testing.T) {
 	t.Parallel()
 
-	te := NewToolExecutor("http://localhost:1")
+	te := NewToolExecutor("http://localhost:1", log.DefaultLogger)
 	_, err := te.Execute(context.Background(), "unknown_tool", "{}", nil)
 	if err == nil {
 		t.Fatal("expected error for unknown tool")
@@ -124,7 +126,7 @@ func TestToolExecutor_NoDatasource(t *testing.T) {
 	}))
 	defer grafanaMock.Close()
 
-	te := NewToolExecutor(grafanaMock.URL)
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
 	_, err := te.Execute(context.Background(), "query_prometheus", `{"query":"up"}`, nil)
 	if err == nil {
 		t.Fatal("expected error when no datasource found")

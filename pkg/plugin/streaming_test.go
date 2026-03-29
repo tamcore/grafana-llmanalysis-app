@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 func TestStreamingChat_SendsSSEChunks(t *testing.T) {
@@ -239,7 +240,7 @@ func TestStreamingChat_ToolCalling(t *testing.T) {
 	defer grafanaMock.Close()
 
 	app := newTestApp(t, llmServer.URL+"/v1", "key")
-	app.toolExecutor = NewToolExecutor(grafanaMock.URL)
+	app.toolExecutor = NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
 
 	chatReq := `{
 		"mode": "explain_panel",

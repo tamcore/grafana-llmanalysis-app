@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 // ToolExecutor executes tool calls by querying Grafana datasources.
@@ -16,15 +18,17 @@ type ToolExecutor struct {
 	grafanaURL     string
 	httpClient     *http.Client
 	defaultHeaders map[string]string
+	logger         log.Logger
 }
 
 // NewToolExecutor creates a new tool executor.
 // grafanaURL is the internal Grafana URL (e.g. http://localhost:3000).
 // authHeaders are forwarded to authenticate datasource proxy requests.
-func NewToolExecutor(grafanaURL string) *ToolExecutor {
+func NewToolExecutor(grafanaURL string, logger log.Logger) *ToolExecutor {
 	return &ToolExecutor{
 		grafanaURL: strings.TrimSuffix(grafanaURL, "/"),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		logger:     logger,
 	}
 }
 
@@ -184,7 +188,7 @@ func (te *ToolExecutor) doGrafanaRequest(ctx context.Context, method, path strin
 		return "", fmt.Errorf("create request: %w", err)
 	}
 
-	// Apply default headers first, then request-specific headers
+	// Apply default headers first, then request-specific headers (which override)
 	for k, v := range te.defaultHeaders {
 		req.Header.Set(k, v)
 	}
@@ -192,6 +196,10 @@ func (te *ToolExecutor) doGrafanaRequest(ctx context.Context, method, path strin
 		req.Header.Set(k, v)
 	}
 	req.Header.Set("Accept", "application/json")
+
+	te.logger.Debug("Tool executor request", "method", method, "path", path,
+		"hasDefaultAuth", te.defaultHeaders["Authorization"] != "",
+		"hasHeaderAuth", headers["Authorization"] != "")
 
 	resp, err := te.httpClient.Do(req)
 	if err != nil {
@@ -205,10 +213,11 @@ func (te *ToolExecutor) doGrafanaRequest(ctx context.Context, method, path strin
 	}
 
 	if resp.StatusCode >= 400 {
+		te.logger.Error("Datasource request failed", "status", resp.StatusCode, "path", path, "body", truncateString(string(respBody), 200))
 		return "", fmt.Errorf("datasource returned status %d: %s", resp.StatusCode, truncateString(string(respBody), 500))
 	}
 
-	// Truncate very large responses to stay within token limits
+	te.logger.Debug("Tool executor response", "status", resp.StatusCode, "bodyLen", len(respBody))
 	result := string(respBody)
 	return truncateString(result, 50000), nil
 }

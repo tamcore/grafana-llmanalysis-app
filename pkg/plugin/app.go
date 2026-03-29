@@ -39,6 +39,9 @@ type App struct {
 
 // NewApp creates a new plugin instance from the given settings.
 func NewApp(_ context.Context, appSettings backend.AppInstanceSettings) (instancemgmt.Instance, error) {
+	logger := log.DefaultLogger
+	logger.Info("Creating new plugin instance", "updated", appSettings.Updated)
+
 	var settings Settings
 	if err := json.Unmarshal(appSettings.JSONData, &settings); err != nil {
 		return nil, fmt.Errorf("unmarshal settings: %w", err)
@@ -65,13 +68,14 @@ func NewApp(_ context.Context, appSettings backend.AppInstanceSettings) (instanc
 		grafanaURL = "http://localhost:3000"
 	}
 
-	logger := log.DefaultLogger
-
-	te := NewToolExecutor(grafanaURL)
+	te := NewToolExecutor(grafanaURL, logger)
 	if settings.GrafanaToken != "" {
 		te.defaultHeaders = map[string]string{
 			"Authorization": "Bearer " + settings.GrafanaToken,
 		}
+		logger.Info("Tool executor configured with service account token")
+	} else {
+		logger.Warn("No Grafana service account token configured; tool calls will rely on forwarded request headers")
 	}
 
 	app := &App{
