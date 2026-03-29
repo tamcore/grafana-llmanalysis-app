@@ -26,7 +26,11 @@ type Settings struct {
 	MaxContextTokens int               `json:"maxContextTokens"`
 	CustomHeaders    map[string]string `json:"customHeaders,omitempty"`
 	GrafanaURL       string            `json:"grafanaURL,omitempty"`
-	APIKey           string            `json:"-"`
+	// GrafanaServiceAcctToken is read from jsonData for convenience.
+	GrafanaServiceAcctToken string `json:"grafanaServiceAccountToken,omitempty"`
+	APIKey                  string `json:"-"`
+	// GrafanaToken is read from secureJsonData.
+	GrafanaToken string `json:"-"`
 }
 
 // App is the main plugin instance.
@@ -64,12 +68,31 @@ func NewApp(_ context.Context, appSettings backend.AppInstanceSettings) (instanc
 		settings.APIKey = apiKey
 	}
 
+	if grafanaToken, ok := appSettings.DecryptedSecureJSONData["grafanaToken"]; ok {
+		settings.GrafanaToken = grafanaToken
+	}
+	// Also support token from jsonData for convenience
+	if settings.GrafanaToken == "" && settings.GrafanaServiceAcctToken != "" {
+		settings.GrafanaToken = settings.GrafanaServiceAcctToken
+	}
+
 	grafanaURL := settings.GrafanaURL
 	if grafanaURL == "" {
 		grafanaURL = "http://localhost:3000"
 	}
 
 	te := NewToolExecutor(grafanaURL, logger)
+	// Grafana strips auth headers from plugin backend requests, so a service
+	// account token is needed for the tool executor to call the Grafana API.
+	// When forwarded headers are present they take precedence (future-proofing).
+	if settings.GrafanaToken != "" {
+		te.defaultHeaders = map[string]string{
+			"Authorization": "Bearer " + settings.GrafanaToken,
+		}
+		logger.Info("Tool executor configured with service account token")
+	} else {
+		logger.Warn("No Grafana service account token configured; tool calls will fail unless headers are forwarded")
+	}
 
 	app := &App{
 		settings:     settings,

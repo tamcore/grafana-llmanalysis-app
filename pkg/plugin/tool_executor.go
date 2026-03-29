@@ -15,9 +15,10 @@ import (
 
 // ToolExecutor executes tool calls by querying Grafana datasources.
 type ToolExecutor struct {
-	grafanaURL string
-	httpClient *http.Client
-	logger     log.Logger
+	grafanaURL     string
+	httpClient     *http.Client
+	defaultHeaders map[string]string
+	logger         log.Logger
 }
 
 // NewToolExecutor creates a new tool executor.
@@ -361,14 +362,19 @@ func (te *ToolExecutor) doGrafanaRequest(ctx context.Context, method, path strin
 		return "", fmt.Errorf("create request: %w", err)
 	}
 
-	// Apply request-specific headers (forwarded from the user's session).
+	// Apply default headers (service account token) first, then
+	// request-specific forwarded headers which can override.
+	for k, v := range te.defaultHeaders {
+		req.Header.Set(k, v)
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 	req.Header.Set("Accept", "application/json")
 
 	te.logger.Debug("Tool executor request", "method", method, "path", path,
-		"hasAuth", headers["Authorization"] != "" || headers["Cookie"] != "")
+		"hasDefaultAuth", te.defaultHeaders["Authorization"] != "",
+		"hasHeaderAuth", headers["Authorization"] != "" || headers["Cookie"] != "")
 
 	resp, err := te.httpClient.Do(req)
 	if err != nil {
