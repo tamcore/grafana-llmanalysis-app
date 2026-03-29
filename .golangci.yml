@@ -1,9 +1,8 @@
 version: "2"
 run:
   go: "1.22"
-linters:
-  default: standard
-issues:
   exclude-dirs:
     - node_modules
     - dist
+linters:
+  default: standard
