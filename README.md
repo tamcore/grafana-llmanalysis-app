@@ -1,76 +1,120 @@
 # Grafana LLM Analysis Plugin
 
-A Grafana app plugin that wires OpenAI-compatible LLM endpoints into Grafana for
-dashboard analysis, panel explanation, Prometheus metrics analysis, and Loki log
-analysis.
+A Grafana app plugin that connects any OpenAI-compatible LLM to your Grafana instance.
+Chat with your infrastructure — the LLM queries Prometheus, Loki, Alertmanager, and
+dashboards in real-time via tool calling to provide data-backed analysis.
 
 ## Features
 
-- **Explain Panel** — Get AI-powered explanations of any panel's data
-- **Summarize Dashboard** — Generate dashboard-level summaries
-- **Analyze Logs** — Ask questions about Loki log data
-- **Analyze Metrics** — Ask questions about Prometheus metrics
-- **Chat with Dashboard** — Select any dashboard and have a conversation about its panels, queries, and data
-- **Live Data Querying** — LLM automatically queries Prometheus and Loki datasources for real-time data via tool calling
-- **Markdown Rendering** — LLM responses render with full markdown: headers, tables, code blocks, lists, and HTML
-- **Streaming Responses** — Real-time streaming from LLM with typing indicator
-- **Panel Menu Integration** — "Analyze with LLM" available directly from any panel's context menu
-- **Any OpenAI-compatible API** — Works with OpenAI, Azure OpenAI, Ollama, vLLM,
-  LiteLLM, and any OpenAI-compatible endpoint
+### 💬 Chat
+Open-ended chat with full tool-calling access. The LLM can query your Prometheus
+metrics, search Loki logs, list alerts, and inspect dashboards — all automatically.
 
-### Tool Calling — Live Prometheus Queries
+- **Auto-discovery** — LLM discovers datasources and dashboards on its own
+- **Manual context** — Pin specific datasources and dashboards for focused queries
+- **Quick actions** — One-click "Find Anomalies", "Cluster Health", "Alert Investigation"
+- **Session persistence** — Conversations saved in Grafana's database, resumable anytime
+- **Multi-turn** — Full conversation context preserved across messages
+- **Token tracking** — Real-time context size indicator with configurable limit
 
-The LLM automatically queries your datasources for real data. Tool call badges show the PromQL being executed in real-time:
+### 📊 Chat with Dashboard
+Select any dashboard and ask questions about it. The plugin extracts panels, queries,
+and variables, then the LLM queries live data.
 
-![Tool Calling](docs/screenshots/plugin-tool-calling.png)
+- **Explain Dashboard** — Structured walkthrough of every panel and metric
+- **Find Anomalies** — LLM queries actual data and flags deviations
+- **Session sidebar** — Manage and resume dashboard conversations
 
-### LLM Analysis — Real Data Analysis
+### 🔍 Analysis Modes
+Right-click any panel → "Analyze with LLM" for quick analysis.
 
-Get structured analysis with actual metrics, actionable recommendations, and markdown-formatted tables:
+- **Explain Panel** — What the data shows, notable patterns, concerns
+- **Summarize Dashboard** — Purpose, key metrics, current state
+- **Analyze Logs** — Pattern detection, error categorization, root causes
+- **Analyze Metrics** — Trend analysis, anomaly detection, recommendations
 
-![LLM Analysis](docs/screenshots/plugin-analyze.png)
+### 🔧 LLM Tool Calling (7 tools)
+The LLM has access to your infrastructure via these tools:
 
-### Chat with Dashboard
+| Tool | Description |
+|------|-------------|
+| `query_prometheus` | Execute PromQL queries against Prometheus/VictoriaMetrics |
+| `query_loki` | Execute LogQL queries against Loki |
+| `list_datasources` | Discover configured datasources |
+| `list_dashboards` | Search and list dashboards |
+| `get_dashboard` | Inspect dashboard panels, queries, variables |
+| `list_alerts` | Check firing/pending alerts from Alertmanager |
+| `list_alert_rules` | Inspect configured alert rules and expressions |
 
-Select any dashboard and ask questions — the plugin automatically extracts all panels, queries, and metadata:
+Tool call badges show queries being executed in real-time, with a **copy button** to
+reuse generated PromQL/LogQL in your own dashboards.
 
-![Dashboard Chat](docs/screenshots/dashboard-chat.png)
+### ✨ Other Features
+- **Streaming responses** — Real-time token-by-token output
+- **Markdown rendering** — Tables, code blocks, headers, lists, HTML
+- **Panel menu integration** — "Analyze with LLM" in every panel's context menu
+- **Any OpenAI-compatible API** — OpenAI, Azure OpenAI, Ollama, vLLM, LiteLLM, etc.
+- **Session export/import** — Download conversations as JSON
+
+## Screenshots
+
+### Chat — Cluster Health with Live Tool Calling
+
+![Chat](docs/screenshots/chat-tool-calling.png)
+
+### Chat with Dashboard — Explain Dashboard
+
+![Dashboard Explain](docs/screenshots/dashboard-explain.png)
+
+### Dashboard Chat — Select & Quick Actions
+
+![Dashboard Chat](docs/screenshots/dashboard-chat-selected.png)
+
+### Chat Page — Sessions & Quick Actions
+
+![Chat Page](docs/screenshots/plugin-chat.png)
 
 ## Requirements
 
 - Grafana ≥ 10.0.0
-- An OpenAI-compatible LLM endpoint
+- An OpenAI-compatible LLM endpoint (with tool calling support recommended)
 
 ## Installation
 
 ### From source
 
 ```bash
-# Clone the repository
-git clone https://github.com/tamcore/grafana-llm.git
-cd grafana-llm
+git clone https://github.com/tamcore/tamcore-llmanalysis-app.git
+cd tamcore-llmanalysis-app
 
-# Install frontend dependencies and build
 npm install
 npm run build
 
-# Build the Go backend
 go build -o dist/gpx_llmanalysis ./pkg/
 
-# Copy dist/ to your Grafana plugins directory
 cp -r dist/ /var/lib/grafana/plugins/tamcore-llmanalysis-app/
 ```
 
 ### Docker (development)
 
 ```bash
-npm install
-npm run build
+npm install && npm run build
 go build -o dist/gpx_llmanalysis ./pkg/
 docker compose up
 ```
 
-Then open Grafana at http://localhost:3000 (admin/admin).
+Open Grafana at http://localhost:3000 (admin/admin).
+
+### Kubernetes (plain manifests)
+
+Example manifests are in `deploy/`. Update `ingress.yaml` and
+`provisioning-datasources.yaml` for your environment.
+
+### Kubernetes (grafana-operator)
+
+If you use the [grafana-operator](https://github.com/grafana/grafana-operator),
+see [docs/grafana-operator.md](docs/grafana-operator.md) for a complete deployment
+guide using `Grafana`, `GrafanaDatasource`, and `GrafanaDashboard` CRDs.
 
 ## Configuration
 
@@ -79,14 +123,17 @@ Then open Grafana at http://localhost:3000 (admin/admin).
 3. Set:
    - **Endpoint URL** — Base URL of your LLM API (e.g., `https://api.openai.com/v1`)
    - **Model** — Model name (e.g., `gpt-4o`)
-   - **API Key** — Your API key (stored securely)
+   - **API Key** — Your API key (stored securely in Grafana)
    - **Timeout** — Request timeout in seconds (default: 60)
    - **Max Tokens** — Maximum response tokens (default: 4096)
-   - **Grafana Service Account Token** _(optional)_ — A Viewer-role SA token for querying datasources via tool calling
+   - **Max Context Tokens** — Context window limit for token tracking (e.g., 120000)
 4. Click **Test Connection** to verify
 5. Click **Save settings**
 
 ## Supported Providers
+
+Any endpoint that implements the OpenAI `POST /v1/chat/completions` API works.
+Tool calling support is recommended for full functionality.
 
 | Provider           | Base URL Example                                      | Auth        |
 | ------------------ | ----------------------------------------------------- | ----------- |
@@ -96,21 +143,13 @@ Then open Grafana at http://localhost:3000 (admin/admin).
 | vLLM               | `http://localhost:8000/v1`                             | Bearer      |
 | LiteLLM            | `http://localhost:4000/v1`                             | Bearer      |
 
-## Usage
-
-1. Navigate to **LLM Analysis** in the Grafana sidebar
-2. Select an **Analysis Mode**
-3. Paste context JSON (panel data, dashboard metadata, logs, or metrics)
-4. Type your question in the **Prompt** field
-5. Click **Analyze**
-
 ## API Endpoints
 
 | Endpoint           | Method | Description                          |
 | ------------------ | ------ | ------------------------------------ |
 | `/resources/health`| GET    | Test LLM endpoint connectivity       |
-| `/resources/chat`  | POST   | Non-streaming chat completion         |
-| `/resources/chat/stream` | POST | Streaming chat completion (SSE) |
+| `/resources/chat`  | POST   | Non-streaming chat completion        |
+| `/resources/chat/stream` | POST | Streaming chat with tool calling |
 
 ## Development
 
@@ -124,13 +163,13 @@ npm test
 # Run Go tests
 go test ./pkg/... -v
 
-# Quality gates
+# Quality gates (must pass before every commit)
 go fmt ./...
 go vet ./...
 golangci-lint run ./...
 ```
 
-## Metrics
+## Observability
 
 The plugin exposes Prometheus metrics:
 
@@ -141,26 +180,33 @@ The plugin exposes Prometheus metrics:
 ## Architecture
 
 ```
-├── pkg/                    # Go backend
-│   ├── main.go             # Plugin entry point
+├── pkg/                     # Go backend
+│   ├── main.go              # Plugin entry point
 │   └── plugin/
-│       ├── app.go          # Plugin instance and settings
-│       ├── health.go       # Health check endpoint
-│       ├── resources.go    # HTTP resource routing
-│       ├── llm.go          # OpenAI-compatible client
-│       ├── streaming.go    # SSE streaming with tool-calling loop
-│       ├── tools.go        # Tool definitions (Prometheus, Loki, datasources)
+│       ├── app.go           # Plugin instance and settings
+│       ├── llm.go           # System prompts per analysis mode
+│       ├── streaming.go     # SSE streaming + tool-calling loop (25 rounds)
+│       ├── tools.go         # Tool definitions for LLM
 │       ├── tool_executor.go # Tool execution via Grafana datasource proxy
-│       ├── security.go     # Input sanitization
-│       └── metrics.go      # Prometheus metrics
-├── src/                    # React frontend
-│   ├── module.tsx           # Plugin entry point
-│   ├── api/                # Backend API client
-│   ├── context/            # Context builder and types
-│   ├── components/         # UI components
-│   └── pages/              # Plugin pages
-├── docs/                   # Specification and docs
-└── docker-compose.yaml     # Dev environment
+│       ├── resources.go     # HTTP resource routing
+│       ├── health.go        # Health check endpoint
+│       ├── security.go      # Input sanitization
+│       └── metrics.go       # Prometheus metrics
+├── src/                     # React frontend
+│   ├── pages/
+│   │   ├── ChatPage.tsx         # Main chat with tool calling
+│   │   ├── DashboardChatPage.tsx # Dashboard-scoped chat
+│   │   └── AnalyzePage.tsx      # Analysis mode page
+│   ├── components/
+│   │   └── ChatView/            # Chat UI with markdown + tool badges
+│   ├── hooks/
+│   │   └── useChatSessions.ts   # Session persistence hook
+│   ├── utils/
+│   │   └── chatStorage.ts       # Session CRUD operations
+│   └── api/                     # Backend API client
+├── deploy/                  # Kubernetes manifests (example)
+├── docs/                    # Specification and screenshots
+└── docker-compose.yaml      # Dev environment
 ```
 
 ## License
