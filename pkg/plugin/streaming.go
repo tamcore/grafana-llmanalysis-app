@@ -95,8 +95,24 @@ func (a *App) streamChatCompletion(ctx context.Context, req ChatRequest, sender 
 			continue // Next round with tool results
 		}
 
-		// Model returned content — stream it to the frontend
-		return a.streamFinalResponse(ctx, client, messages, tools, sender)
+		// Model returned content — send it directly instead of re-requesting,
+		// since a second streaming request may not reproduce the same answer.
+		content := choice.Message.Content
+		if content != "" {
+			if err := sendStreamChunk(sender, ChatResponse{Content: content}); err != nil {
+				return err
+			}
+		}
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: content,
+		})
+		tokens := estimateMessagesTokens(messages)
+		return sendStreamChunk(sender, ChatResponse{
+			Done:          true,
+			ContextTokens: tokens,
+			MaxTokens:     a.settings.MaxContextTokens,
+		})
 	}
 
 	// Tool-calling limit reached — ask the LLM to produce a final answer
