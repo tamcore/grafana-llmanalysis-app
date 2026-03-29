@@ -16,5 +16,7 @@ module.exports = {
     '\\.(gif|ttf|eot|svg|png)$': '<rootDir>/src/__mocks__/fileMock.js',
     '^react-markdown$': '<rootDir>/src/__mocks__/react-markdown.js',
     '^remark-gfm$': '<rootDir>/src/__mocks__/remark-gfm.js',
+    '^rehype-raw$': '<rootDir>/src/__mocks__/rehype-raw.js',
+    '^rehype-sanitize$': '<rootDir>/src/__mocks__/rehype-sanitize.js',
   },
 };
