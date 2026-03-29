@@ -11,15 +11,22 @@ analysis.
 - **Analyze Logs** — Ask questions about Loki log data
 - **Analyze Metrics** — Ask questions about Prometheus metrics
 - **Chat with Dashboard** — Select any dashboard and have a conversation about its panels, queries, and data
-- **Markdown Rendering** — LLM responses render with full markdown: headers, tables, code blocks, lists
+- **Live Data Querying** — LLM automatically queries Prometheus and Loki datasources for real-time data via tool calling
+- **Markdown Rendering** — LLM responses render with full markdown: headers, tables, code blocks, lists, and HTML
 - **Streaming Responses** — Real-time streaming from LLM with typing indicator
 - **Panel Menu Integration** — "Analyze with LLM" available directly from any panel's context menu
 - **Any OpenAI-compatible API** — Works with OpenAI, Azure OpenAI, Ollama, vLLM,
   LiteLLM, IONOS AI Model Hub, and more
 
-### LLM Analysis — Panel Explanation
+### Tool Calling — Live Prometheus Queries
 
-Provide panel context and get structured, actionable analysis with recommendations:
+The LLM automatically queries your datasources for real data. Tool call badges show the PromQL being executed in real-time:
+
+![Tool Calling](docs/screenshots/plugin-tool-calling.png)
+
+### LLM Analysis — Real Data Analysis
+
+Get structured analysis with actual metrics, actionable recommendations, and markdown-formatted tables:
 
 ![LLM Analysis](docs/screenshots/plugin-analyze.png)
 
@@ -75,6 +82,7 @@ Then open Grafana at http://localhost:3000 (admin/admin).
    - **API Key** — Your API key (stored securely)
    - **Timeout** — Request timeout in seconds (default: 60)
    - **Max Tokens** — Maximum response tokens (default: 4096)
+   - **Grafana Service Account Token** _(optional)_ — A Viewer-role SA token for querying datasources via tool calling
 4. Click **Test Connection** to verify
 5. Click **Save settings**
 
@@ -141,7 +149,9 @@ The plugin exposes Prometheus metrics:
 │       ├── health.go       # Health check endpoint
 │       ├── resources.go    # HTTP resource routing
 │       ├── llm.go          # OpenAI-compatible client
-│       ├── streaming.go    # SSE streaming relay
+│       ├── streaming.go    # SSE streaming with tool-calling loop
+│       ├── tools.go        # Tool definitions (Prometheus, Loki, datasources)
+│       ├── tool_executor.go # Tool execution via Grafana datasource proxy
 │       ├── security.go     # Input sanitization
 │       └── metrics.go      # Prometheus metrics
 ├── src/                    # React frontend
