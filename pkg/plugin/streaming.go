@@ -114,7 +114,11 @@ func (a *App) streamFinalResponse(ctx context.Context, client *openai.Client, me
 			return sendStreamChunk(sender, ChatResponse{Content: "", Done: true})
 		}
 		if err != nil {
-			return fmt.Errorf("recv stream chunk: %w", err)
+			// Stream error after partial content — still send done so
+			// the frontend commits whatever it received.
+			a.logger.Error("Stream recv error, sending done", "error", err)
+			_ = sendStreamChunk(sender, ChatResponse{Content: "", Done: true})
+			return nil
 		}
 
 		if len(response.Choices) > 0 {

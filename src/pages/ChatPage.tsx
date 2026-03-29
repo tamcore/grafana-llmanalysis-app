@@ -107,8 +107,8 @@ export function ChatPage() {
       setStreamContent('');
       setActiveToolCalls([]);
 
+      let fullContent = '';
       try {
-        let fullContent = '';
         for await (const chunk of streamChat('chat', userMessage.content, context)) {
           if (chunk.done) {
             break;
@@ -120,20 +120,26 @@ export function ChatPage() {
           fullContent += chunk.content;
           setStreamContent(fullContent);
         }
-        setMessages((prev) => [...prev, { role: 'assistant', content: fullContent }]);
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        setError(message);
-
-        try {
-          const resp = await sendChat('chat', userMessage.content, buildContext());
-          setMessages((prev) => [...prev, { role: 'assistant', content: resp.content }]);
-          setError(null);
-        } catch (fallbackErr: unknown) {
-          const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : 'Request failed';
-          setError(fbMsg);
+        // If we have no streamed content, try a non-streaming fallback
+        if (!fullContent.trim()) {
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          setError(message);
+          try {
+            const resp = await sendChat('chat', userMessage.content, buildContext());
+            if (resp.content?.trim()) {
+              fullContent = resp.content;
+              setError(null);
+            }
+          } catch (fallbackErr: unknown) {
+            const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : 'Request failed';
+            setError(fbMsg);
+          }
         }
       } finally {
+        if (fullContent.trim()) {
+          setMessages((prev) => [...prev, { role: 'assistant', content: fullContent }]);
+        }
         setIsStreaming(false);
         setStreamContent('');
         setActiveToolCalls([]);

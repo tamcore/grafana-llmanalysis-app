@@ -141,8 +141,8 @@ export function DashboardChatPage() {
       setStreamContent('');
       setActiveToolCalls([]);
 
+      let fullContent = '';
       try {
-        let fullContent = '';
         for await (const chunk of streamChat('summarize_dashboard', userMessage.content, dashboardContext)) {
           if (chunk.done) {
             break;
@@ -154,19 +154,22 @@ export function DashboardChatPage() {
           fullContent += chunk.content;
           setStreamContent(fullContent);
         }
-        if (fullContent) {
-          setMessages((prev) => [...prev, { role: 'assistant', content: fullContent }]);
-        }
       } catch {
-        // Fallback to non-streaming
-        try {
-          const resp = await sendChat('summarize_dashboard', userMessage.content, dashboardContext);
-          setMessages((prev) => [...prev, { role: 'assistant', content: resp.content }]);
-        } catch (fallbackErr: unknown) {
-          const msg = fallbackErr instanceof Error ? fallbackErr.message : 'Request failed';
-          setError(msg);
+        if (!fullContent.trim()) {
+          try {
+            const resp = await sendChat('summarize_dashboard', userMessage.content, dashboardContext);
+            if (resp.content?.trim()) {
+              fullContent = resp.content;
+            }
+          } catch (fallbackErr: unknown) {
+            const msg = fallbackErr instanceof Error ? fallbackErr.message : 'Request failed';
+            setError(msg);
+          }
         }
       } finally {
+        if (fullContent.trim()) {
+          setMessages((prev) => [...prev, { role: 'assistant', content: fullContent }]);
+        }
         setIsStreaming(false);
         setStreamContent('');
         setActiveToolCalls([]);
