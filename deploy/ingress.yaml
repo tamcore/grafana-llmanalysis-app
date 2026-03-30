@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: grafana.85.215.177.78.nip.io
+    - host: grafana.example.com
       http:
         paths:
           - path: /
@@ -21,5 +21,5 @@ spec:
                   number: 3000
   tls:
     - hosts:
-        - grafana.85.215.177.78.nip.io
+        - grafana.example.com
       secretName: grafana-tls
