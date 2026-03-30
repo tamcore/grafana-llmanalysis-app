@@ -33,7 +33,7 @@ type Settings struct {
 	// GrafanaTokenPath is a file path to read the Grafana service account token from.
 	// When set, the token is re-read on each request, enabling rotation without restarts.
 	GrafanaTokenPath string `json:"grafanaTokenPath,omitempty"`
-	APIKey string `json:"-"`
+	APIKey           string `json:"-"`
 	// GrafanaToken is read from secureJsonData.
 	GrafanaToken string `json:"-"`
 }

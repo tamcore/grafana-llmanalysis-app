@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -25,6 +26,11 @@ type ToolExecutor struct {
 	// (e.g. from a Kubernetes secret mount) are picked up without a restart.
 	tokenPath string
 	logger    log.Logger
+
+	// Datasource cache to avoid fetching the full list on every tool call.
+	dsCache     map[string]string
+	dsCacheMu   sync.Mutex
+	dsCacheTime time.Time
 }
 
 // NewToolExecutor creates a new tool executor.
@@ -397,7 +403,21 @@ func (te *ToolExecutor) listAlertRules(ctx context.Context, headers map[string]s
 	return te.doGrafanaRequest(ctx, http.MethodGet, "/api/ruler/grafana/api/v1/rules", nil, headers)
 }
 
+const dsCacheTTL = 30 * time.Second
+
 func (te *ToolExecutor) findDatasource(ctx context.Context, headers map[string]string, dsType string) (string, error) {
+	te.dsCacheMu.Lock()
+	if te.dsCache != nil && time.Since(te.dsCacheTime) < dsCacheTTL {
+		if uid, ok := te.dsCache[dsType]; ok {
+			te.dsCacheMu.Unlock()
+			return uid, nil
+		}
+		// Type not found in cache — still valid cache, return error
+		te.dsCacheMu.Unlock()
+		return "", fmt.Errorf("no datasource of type %q found", dsType)
+	}
+	te.dsCacheMu.Unlock()
+
 	body, err := te.doGrafanaRequest(ctx, http.MethodGet, "/api/datasources", nil, headers)
 	if err != nil {
 		return "", err
@@ -411,13 +431,21 @@ func (te *ToolExecutor) findDatasource(ctx context.Context, headers map[string]s
 		return "", fmt.Errorf("parse datasources: %w", err)
 	}
 
+	cache := make(map[string]string, len(datasources))
 	for _, ds := range datasources {
-		if ds.Type == dsType {
-			return ds.UID, nil
-		}
+		cache[ds.Type] = ds.UID
 	}
 
-	return "", fmt.Errorf("no datasource of type %q found", dsType)
+	te.dsCacheMu.Lock()
+	te.dsCache = cache
+	te.dsCacheTime = time.Now()
+	te.dsCacheMu.Unlock()
+
+	uid, ok := cache[dsType]
+	if !ok {
+		return "", fmt.Errorf("no datasource of type %q found", dsType)
+	}
+	return uid, nil
 }
 
 func (te *ToolExecutor) doGrafanaRequest(ctx context.Context, method, path string, body io.Reader, headers map[string]string) (string, error) {

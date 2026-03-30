@@ -738,52 +738,96 @@ func TestToolExecutor_ListAlertRules(t *testing.T) {
 }
 
 func TestTruncateString_NoTruncation(t *testing.T) {
-t.Parallel()
-input := "short"
-got := truncateString(input, 100)
-if got != input {
-t.Errorf("truncateString(%q, 100) = %q, want unchanged", input, got)
-}
+	t.Parallel()
+	input := "short"
+	got := truncateString(input, 100)
+	if got != input {
+		t.Errorf("truncateString(%q, 100) = %q, want unchanged", input, got)
+	}
 }
 
 func TestTruncateString_TruncatesASCII(t *testing.T) {
-t.Parallel()
-input := "Hello, World!"
-got := truncateString(input, 5)
-if got != "Hello... [truncated]" {
-t.Errorf("truncateString(%q, 5) = %q", input, got)
-}
+	t.Parallel()
+	input := "Hello, World!"
+	got := truncateString(input, 5)
+	if got != "Hello... [truncated]" {
+		t.Errorf("truncateString(%q, 5) = %q", input, got)
+	}
 }
 
 func TestTruncateString_DoesNotSplitMultiByte(t *testing.T) {
-t.Parallel()
-// 🔥 is 4 bytes. Build "🔥🔥" = 8 bytes, truncate at 5 bytes
-input := "🔥🔥"
-got := truncateString(input, 5)
-// Should walk back to byte 4 (start of second 🔥) and truncate there
-if !strings.HasPrefix(got, "🔥") {
-t.Errorf("expected prefix '🔥', got %q", got)
-}
-// Verify valid UTF-8
-for _, r := range got {
-if r == '\uFFFD' {
-t.Error("found replacement character — truncation split a multi-byte rune")
-}
-}
+	t.Parallel()
+	// 🔥 is 4 bytes. Build "🔥🔥" = 8 bytes, truncate at 5 bytes
+	input := "🔥🔥"
+	got := truncateString(input, 5)
+	// Should walk back to byte 4 (start of second 🔥) and truncate there
+	if !strings.HasPrefix(got, "🔥") {
+		t.Errorf("expected prefix '🔥', got %q", got)
+	}
+	// Verify valid UTF-8
+	for _, r := range got {
+		if r == '\uFFFD' {
+			t.Error("found replacement character — truncation split a multi-byte rune")
+		}
+	}
 }
 
 func TestTruncateString_CJKCharacters(t *testing.T) {
-t.Parallel()
-// 你 = 3 bytes, 好 = 3 bytes, 世 = 3 bytes, 界 = 3 bytes = 12 bytes
-input := "你好世界"
-got := truncateString(input, 7)
-// Should truncate at byte 6 (end of 好) since byte 7 is mid-rune
-if !strings.HasPrefix(got, "你好") {
-t.Errorf("expected prefix '你好', got %q", got)
+	t.Parallel()
+	// 你 = 3 bytes, 好 = 3 bytes, 世 = 3 bytes, 界 = 3 bytes = 12 bytes
+	input := "你好世界"
+	got := truncateString(input, 7)
+	// Should truncate at byte 6 (end of 好) since byte 7 is mid-rune
+	if !strings.HasPrefix(got, "你好") {
+		t.Errorf("expected prefix '你好', got %q", got)
+	}
+	for _, r := range got {
+		if r == '\uFFFD' {
+			t.Error("found replacement character")
+		}
+	}
 }
-for _, r := range got {
-if r == '\uFFFD' {
-t.Error("found replacement character")
-}
-}
+
+func TestToolExecutor_DatasourceCacheHit(t *testing.T) {
+	t.Parallel()
+
+	callCount := 0
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/datasources" {
+			callCount++
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"name": "Prometheus", "type": "prometheus", "uid": "prom-uid"},
+				{"name": "Loki", "type": "loki", "uid": "loki-uid"},
+			})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success"}`))
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+
+	// First call populates cache
+	uid1, err := te.findDatasource(context.Background(), nil, "prometheus")
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if uid1 != "prom-uid" {
+		t.Errorf("uid = %q, want prom-uid", uid1)
+	}
+
+	// Second call should use cache (no additional /api/datasources request)
+	uid2, err := te.findDatasource(context.Background(), nil, "loki")
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if uid2 != "loki-uid" {
+		t.Errorf("uid = %q, want loki-uid", uid2)
+	}
+
+	if callCount != 1 {
+		t.Errorf("expected 1 /api/datasources call, got %d", callCount)
+	}
 }

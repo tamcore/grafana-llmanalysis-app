@@ -34,11 +34,11 @@ func sanitizePrompt(s string) string {
 }
 
 // sanitizeContextSize rejects context payloads that exceed the maximum size.
-func sanitizeContextSize(data []byte, maxBytes int) ([]byte, error) {
+func sanitizeContextSize(data []byte, maxBytes int) error {
 	if len(data) > maxBytes {
-		return nil, fmt.Errorf("context too large: %d bytes exceeds maximum %d bytes", len(data), maxBytes)
+		return fmt.Errorf("context too large: %d bytes exceeds maximum %d bytes", len(data), maxBytes)
 	}
-	return data, nil
+	return nil
 }
 
 // validateURL checks that a URL uses an allowed scheme (http/https) and has a host.

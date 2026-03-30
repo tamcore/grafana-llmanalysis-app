@@ -99,13 +99,9 @@ func TestSanitizeContextSize_UnderLimit(t *testing.T) {
 	t.Parallel()
 
 	small := []byte(`{"panel":{"title":"test"}}`)
-	got, err := sanitizeContextSize(small, maxContextBytes)
+	err := sanitizeContextSize(small, maxContextBytes)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if string(got) != string(small) {
-		t.Error("expected unchanged context")
 	}
 }
 
@@ -117,7 +113,7 @@ func TestSanitizeContextSize_OverLimit(t *testing.T) {
 		big[i] = 'x'
 	}
 
-	_, err := sanitizeContextSize(big, maxContextBytes)
+	err := sanitizeContextSize(big, maxContextBytes)
 	if err == nil {
 		t.Error("expected error for oversized context")
 	}

@@ -94,7 +94,7 @@ func (a *App) handleStreamResource(ctx context.Context, req *backend.CallResourc
 		return sendErrorResponse(sender, http.StatusBadRequest, "invalid mode: "+chatReq.Mode)
 	}
 
-	if _, err := sanitizeContextSize(chatReq.Context, maxContextBytes); err != nil {
+	if err := sanitizeContextSize(chatReq.Context, maxContextBytes); err != nil {
 		return sendErrorResponse(sender, http.StatusBadRequest, err.Error())
 	}
 
@@ -192,7 +192,7 @@ func (a *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := sanitizeContextSize(req.Context, maxContextBytes); err != nil {
+	if err := sanitizeContextSize(req.Context, maxContextBytes); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": err.Error(),
 		})
