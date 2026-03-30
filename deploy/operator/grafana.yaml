@@ -61,7 +61,7 @@ spec:
     spec:
       ingressClassName: nginx
       rules:
-        - host: grafana.example.com
+        - host: grafana.85.215.177.78.nip.io
           http:
             paths:
               - path: /
@@ -73,5 +73,5 @@ spec:
                       number: 3000
       tls:
         - hosts:
-            - grafana.example.com
+            - grafana.85.215.177.78.nip.io
           secretName: grafana-tls
