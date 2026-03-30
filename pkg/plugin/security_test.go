@@ -92,6 +92,55 @@ func TestSanitizeContextSize_OverLimit(t *testing.T) {
 	}
 }
 
+func TestValidateURL_ValidHTTPS(t *testing.T) {
+	t.Parallel()
+	if err := validateURL("https://api.openai.com/v1"); err != nil {
+		t.Errorf("expected valid, got error: %v", err)
+	}
+}
+
+func TestValidateURL_ValidHTTP(t *testing.T) {
+	t.Parallel()
+	if err := validateURL("http://localhost:3000"); err != nil {
+		t.Errorf("expected valid, got error: %v", err)
+	}
+}
+
+func TestValidateURL_RejectsFileScheme(t *testing.T) {
+	t.Parallel()
+	if err := validateURL("file:///etc/passwd"); err == nil {
+		t.Error("expected error for file:// scheme")
+	}
+}
+
+func TestValidateURL_RejectsJavascript(t *testing.T) {
+	t.Parallel()
+	if err := validateURL("javascript:alert(1)"); err == nil {
+		t.Error("expected error for javascript: scheme")
+	}
+}
+
+func TestValidateURL_RejectsEmptyHost(t *testing.T) {
+	t.Parallel()
+	if err := validateURL("http://"); err == nil {
+		t.Error("expected error for empty host")
+	}
+}
+
+func TestValidateURL_RejectsEmpty(t *testing.T) {
+	t.Parallel()
+	if err := validateURL(""); err == nil {
+		t.Error("expected error for empty URL")
+	}
+}
+
+func TestValidateURL_RejectsGopher(t *testing.T) {
+	t.Parallel()
+	if err := validateURL("gopher://evil.com"); err == nil {
+		t.Error("expected error for gopher:// scheme")
+	}
+}
+
 func TestSettingsAPIKeyNeverInJSON(t *testing.T) {
 	t.Parallel()
 

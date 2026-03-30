@@ -73,9 +73,19 @@ func NewApp(_ context.Context, appSettings backend.AppInstanceSettings) (instanc
 		settings.GrafanaToken = grafanaToken
 	}
 
+	// Validate URLs to prevent SSRF
+	if settings.EndpointURL != "" {
+		if err := validateURL(settings.EndpointURL); err != nil {
+			return nil, fmt.Errorf("invalid endpointURL: %w", err)
+		}
+	}
+
 	grafanaURL := settings.GrafanaURL
 	if grafanaURL == "" {
 		grafanaURL = "http://localhost:3000"
+	}
+	if err := validateURL(grafanaURL); err != nil {
+		return nil, fmt.Errorf("invalid grafanaURL: %w", err)
 	}
 
 	te := NewToolExecutor(grafanaURL, logger)

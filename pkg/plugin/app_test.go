@@ -160,6 +160,32 @@ func TestNewApp_PlaintextTokenIgnored(t *testing.T) {
 	}
 }
 
+func TestNewApp_RejectsFileSchemeEndpointURL(t *testing.T) {
+	t.Parallel()
+
+	settings := backend.AppInstanceSettings{
+		JSONData: []byte(`{"endpointURL":"file:///etc/passwd","model":"test"}`),
+	}
+
+	_, err := NewApp(context.Background(), settings)
+	if err == nil {
+		t.Fatal("expected error for file:// endpointURL")
+	}
+}
+
+func TestNewApp_RejectsFileSchemeGrafanaURL(t *testing.T) {
+	t.Parallel()
+
+	settings := backend.AppInstanceSettings{
+		JSONData: []byte(`{"endpointURL":"https://example.com/v1","model":"test","grafanaURL":"gopher://evil.com"}`),
+	}
+
+	_, err := NewApp(context.Background(), settings)
+	if err == nil {
+		t.Fatal("expected error for gopher:// grafanaURL")
+	}
+}
+
 func TestNewApp_GrafanaTokenPathTakesPrecedence(t *testing.T) {
 	t.Parallel()
 
