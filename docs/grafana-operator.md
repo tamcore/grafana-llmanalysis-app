@@ -109,7 +109,7 @@ deployment:
             command: ["sh", "-c"]
             args:
               - |
-                wget -qO- https://github.com/tamcore/tamcore-llmanalysis-app/releases/download/v1.0.0/tamcore-llmanalysis-app-1.0.0.tar.gz \
+                wget -qO- https://github.com/tamcore/grafana-llmanalysis-app/releases/download/v1.0.0/tamcore-llmanalysis-app-1.0.0.tar.gz \
                   | tar xz -C /plugins/
             volumeMounts:
               - name: llm-plugin
@@ -357,7 +357,7 @@ spec:
               command: ["sh", "-c"]
               args:
                 - |
-                  wget -qO- https://github.com/tamcore/tamcore-llmanalysis-app/releases/download/v1.0.0/tamcore-llmanalysis-app-1.0.0.tar.gz \
+                  wget -qO- https://github.com/tamcore/grafana-llmanalysis-app/releases/download/v1.0.0/tamcore-llmanalysis-app-1.0.0.tar.gz \
                     | tar xz -C /plugins/
               volumeMounts:
                 - name: llm-plugin

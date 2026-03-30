@@ -84,7 +84,7 @@ reuse generated PromQL/LogQL in your own dashboards.
 ### From source
 
 ```bash
-git clone https://github.com/tamcore/tamcore-llmanalysis-app.git
+git clone https://github.com/tamcore/grafana-llmanalysis-app.git
 cd tamcore-llmanalysis-app
 
 npm install

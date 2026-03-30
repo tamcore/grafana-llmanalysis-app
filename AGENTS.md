@@ -6,7 +6,7 @@ Grafana LLM plugin — an app plugin with Go backend that wires OpenAI-compatibl
 LLM endpoints into Grafana for dashboard/panel analysis, Prometheus metrics
 analysis, and Loki log analysis.
 
-**Repository:** <https://github.com/tamcore/tamcore-llmanalysis-app>
+**Repository:** <https://github.com/tamcore/grafana-llmanalysis-app>
 
 ## Development Rules
 
