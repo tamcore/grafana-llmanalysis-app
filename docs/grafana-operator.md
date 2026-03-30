@@ -283,16 +283,64 @@ spec:
           secretName: grafana-tls
 ```
 
-## 6. Plugin Configuration
+## 6. Plugin Configuration (jsonData / secureJsonData)
 
-After deployment, configure the LLM endpoint:
+The plugin needs an LLM endpoint URL, model name, and API key. There are two
+ways to provision this declaratively.
 
-1. Log in to Grafana
-2. Go to **Administration → Plugins → LLM Analysis → Configuration**
-3. Set your endpoint URL, model, and API key
-4. Click **Test Connection**, then **Save**
+### Option A — Grafana provisioning file (recommended)
 
-Alternatively, provision the plugin configuration via the Grafana API:
+Mount a provisioning YAML via a ConfigMap. Grafana reads files in
+`/etc/grafana/provisioning/plugins/` on startup and applies them automatically.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: llm-plugin-config
+  namespace: grafana
+stringData:
+  llm-analysis.yaml: |
+    apiVersion: 1
+    apps:
+      - type: tamcore-llmanalysis-app
+        org_id: 1
+        disabled: false
+        jsonData:
+          endpointURL: "https://api.openai.com/v1"
+          model: "gpt-4o"
+          timeoutSeconds: 60
+          maxTokens: 4096
+          maxContextTokens: 120000
+        secureJsonData:
+          apiKey: "sk-..."
+```
+
+Then add a volume mount to the `Grafana` CR:
+
+```yaml
+deployment:
+  spec:
+    template:
+      spec:
+        containers:
+          - name: grafana
+            volumeMounts:
+              - name: llm-plugin-provisioning
+                mountPath: /etc/grafana/provisioning/plugins
+                readOnly: true
+        volumes:
+          - name: llm-plugin-provisioning
+            secret:
+              secretName: llm-plugin-config
+```
+
+> A Secret is used instead of a ConfigMap because the file contains the API key
+> in `secureJsonData`. Grafana encrypts it in its database on first load.
+
+### Option B — Grafana API call
+
+If you prefer to configure after deployment (or change settings without restart):
 
 ```bash
 curl -u admin:change-me -X POST \
@@ -313,6 +361,64 @@ curl -u admin:change-me -X POST \
   }'
 ```
 
+### Plugin settings reference
+
+| Field | jsonData / secureJsonData | Description |
+|-------|--------------------------|-------------|
+| `endpointURL` | jsonData | Base URL of your OpenAI-compatible API |
+| `model` | jsonData | Model name (e.g., `gpt-4o`) |
+| `apiKey` | **secureJsonData** | API key (stored encrypted in Grafana DB) |
+| `timeoutSeconds` | jsonData | Request timeout (default: 60) |
+| `maxTokens` | jsonData | Max response tokens (default: 4096) |
+| `maxContextTokens` | jsonData | Context window limit for token tracking |
+
+## 7. Service Accounts
+
+Use the `GrafanaServiceAccount` CRD to create a service account with an API
+token. This is useful for CI/CD pipelines that need to configure the plugin or
+for external services that call the Grafana API.
+
+```yaml
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaServiceAccount
+metadata:
+  name: llm-plugin-admin
+  namespace: grafana
+spec:
+  instanceName: grafana
+  name: llm-plugin-admin
+  role: Editor
+  tokens:
+    - name: ci-token
+      secretName: llm-plugin-token
+      expires: "2027-01-01T00:00:00Z"
+```
+
+The operator creates the service account in Grafana and stores the token in the
+Kubernetes Secret specified by `secretName`. You can then use it to configure
+the plugin via the API:
+
+```bash
+TOKEN=$(kubectl get secret llm-plugin-token -n grafana -o jsonpath='{.data.token}' | base64 -d)
+
+curl -H "Authorization: Bearer $TOKEN" -X POST \
+  http://grafana.example.com/api/plugins/tamcore-llmanalysis-app/settings \
+  -H 'Content-Type: application/json' \
+  -d '{ "enabled": true, "jsonData": { ... }, "secureJsonData": { ... } }'
+```
+
+### GrafanaServiceAccount fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `instanceName` | yes | Name of the `Grafana` CR (immutable) |
+| `name` | no | Display name in Grafana (immutable, defaults to CR name) |
+| `role` | yes | `Viewer`, `Editor`, or `Admin` |
+| `isDisabled` | no | Disable the account (default: false) |
+| `tokens[].name` | yes | Token display name |
+| `tokens[].secretName` | no | K8s Secret to store the token (auto-generated if omitted) |
+| `tokens[].expires` | no | Expiration datetime (ISO 8601, omit for no expiry) |
+
 ## Complete Example
 
 A single-file deployment combining all resources:
@@ -331,6 +437,27 @@ metadata:
   namespace: grafana
 stringData:
   password: "change-me"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: llm-plugin-config
+  namespace: grafana
+stringData:
+  llm-analysis.yaml: |
+    apiVersion: 1
+    apps:
+      - type: tamcore-llmanalysis-app
+        org_id: 1
+        disabled: false
+        jsonData:
+          endpointURL: "https://api.openai.com/v1"
+          model: "gpt-4o"
+          timeoutSeconds: 60
+          maxTokens: 4096
+          maxContextTokens: 120000
+        secureJsonData:
+          apiKey: "sk-..."
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: Grafana
@@ -375,9 +502,15 @@ spec:
               volumeMounts:
                 - name: llm-plugin
                   mountPath: /var/lib/grafana/plugins/tamcore-llmanalysis-app
+                - name: llm-plugin-provisioning
+                  mountPath: /etc/grafana/provisioning/plugins
+                  readOnly: true
           volumes:
             - name: llm-plugin
               emptyDir: {}
+            - name: llm-plugin-provisioning
+              secret:
+                secretName: llm-plugin-config
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
@@ -409,6 +542,19 @@ spec:
     type: loki
     access: proxy
     url: http://loki.monitoring.svc:3100
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaServiceAccount
+metadata:
+  name: llm-admin
+  namespace: grafana
+spec:
+  instanceName: grafana
+  name: llm-admin
+  role: Editor
+  tokens:
+    - name: api-token
+      secretName: llm-admin-token
 EOF
 ```
 
