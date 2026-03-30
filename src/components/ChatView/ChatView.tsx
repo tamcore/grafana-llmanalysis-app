@@ -4,7 +4,6 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useRef, useEffect, useCallback } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 
 interface ChatMessage {
@@ -29,7 +28,7 @@ function MarkdownContent({ content }: { content: string }) {
   const styles = useStyles2(getStyles);
   return (
     <div className={styles.markdown}>
-      <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>{content}</Markdown>
+      <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{content}</Markdown>
     </div>
   );
 }
