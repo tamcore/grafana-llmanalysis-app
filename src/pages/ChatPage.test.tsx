@@ -1,6 +1,18 @@
 import { render, screen } from '@testing-library/react';
 import { ChatPage } from './ChatPage';
 
+const mockTheme = {
+  colors: {
+    background: { primary: '#111', secondary: '#222', canvas: '#000' },
+    text: { primary: '#fff', secondary: '#ccc', disabled: '#999' },
+    primary: { main: '#3274D9' },
+    success: { main: '#1a7c4f' },
+    warning: { main: '#f0b400' },
+    error: { main: '#e02f44' },
+  },
+  spacing: () => '8px',
+};
+
 jest.mock('@grafana/ui', () => ({
   useStyles2: () =>
     new Proxy(
@@ -9,6 +21,7 @@ jest.mock('@grafana/ui', () => ({
         get: () => '',
       }
     ),
+  useTheme2: () => mockTheme,
   Field: ({ children, label }: any) => (
     <div>
       <label>{label}</label>
