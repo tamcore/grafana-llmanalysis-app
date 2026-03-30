@@ -25,6 +25,7 @@ archives:
     formats:
       - zip
       - tar.gz
+    wrap_in_directory: "tamcore-llmanalysis-app"
     files:
       - src: "plugin-dist/*.*"
         dst: "."
