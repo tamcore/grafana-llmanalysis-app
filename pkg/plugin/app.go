@@ -32,7 +32,7 @@ type Settings struct {
 	GrafanaURL       string            `json:"grafanaURL,omitempty"`
 	// GrafanaTokenPath is a file path to read the Grafana service account token from.
 	// When set, the token is re-read on each request, enabling rotation without restarts.
-	GrafanaTokenPath string `json:"grafanaTokenPath,omitempty"`
+	GrafanaTokenPath string `json:"-"`
 	APIKey           string `json:"-"`
 	// GrafanaToken is read from secureJsonData.
 	GrafanaToken string `json:"-"`
@@ -67,6 +67,15 @@ func NewApp(_ context.Context, appSettings backend.AppInstanceSettings) (instanc
 	var settings Settings
 	if err := json.Unmarshal(appSettings.JSONData, &settings); err != nil {
 		return nil, fmt.Errorf("unmarshal settings: %w", err)
+	}
+
+	// GrafanaTokenPath is tagged json:"-" to prevent accidental serialization,
+	// so we extract it manually from the raw JSON.
+	var rawSettings struct {
+		GrafanaTokenPath string `json:"grafanaTokenPath,omitempty"`
+	}
+	if err := json.Unmarshal(appSettings.JSONData, &rawSettings); err == nil {
+		settings.GrafanaTokenPath = rawSettings.GrafanaTokenPath
 	}
 
 	if settings.TimeoutSeconds <= 0 {
