@@ -1,0 +1,49 @@
+version: 2
+
+project_name: tamcore-llmanalysis-app
+
+builds:
+  - main: ./pkg
+    binary: "gpx_llmanalysis_{{ .Os }}_{{ .Arch }}"
+    ldflags:
+      - -s -w
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: plugin
+    name_template: "{{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+    files:
+      - src: "plugin-dist/*.*"
+        dst: "."
+        strip_parent: true
+      - src: "plugin-dist/img/*"
+        dst: "img"
+        strip_parent: true
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  mode: replace
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch

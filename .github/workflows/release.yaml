@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stage plugin assets
+        run: |
+          mkdir -p plugin-dist
+          cp -r dist/* plugin-dist/
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/%VERSION%/$VERSION/g" plugin-dist/plugin.json
+          sed -i "s/%TODAY%/$(date -u +%Y-%m-%d)/g" plugin-dist/plugin.json
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

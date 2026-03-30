@@ -1,0 +1,34 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: victoriametrics
+  namespace: grafana-llm
+spec:
+  instanceSelector:
+    matchLabels:
+      app: grafana
+  datasource:
+    name: VictoriaMetrics
+    type: prometheus
+    access: proxy
+    url: http://vmsingle-victoria-metrics-k8s-stack.monitoring.svc:8428
+    isDefault: true
+    editable: true
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: alertmanager
+  namespace: grafana-llm
+spec:
+  instanceSelector:
+    matchLabels:
+      app: grafana
+  datasource:
+    name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://vmalertmanager-victoria-metrics-k8s-stack.monitoring.svc:9093
+    editable: true
+    jsonData:
+      implementation: prometheus

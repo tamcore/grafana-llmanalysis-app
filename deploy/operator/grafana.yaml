@@ -1,0 +1,84 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: grafana
+  namespace: grafana-llm
+  labels:
+    app: grafana
+spec:
+  version: "12.4.2"
+
+  config:
+    security:
+      admin_user: admin
+    plugins:
+      allow_loading_unsigned_plugins: tamcore-llmanalysis-app
+
+  deployment:
+    spec:
+      template:
+        spec:
+          initContainers:
+            - name: install-llm-plugin
+              image: curlimages/curl:latest
+              command: ["sh", "-c"]
+              args:
+                - |
+                  TAG=$(curl -sI https://github.com/tamcore/grafana-llmanalysis-app/releases/latest | grep -i '^location:' | sed 's|.*/||;s/\r$//')
+                  ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+                  curl -sL "https://github.com/tamcore/grafana-llmanalysis-app/releases/download/${TAG}/tamcore-llmanalysis-app-${TAG}-linux-${ARCH}.tar.gz" | tar xz -C /plugins/
+              volumeMounts:
+                - name: llm-plugin
+                  mountPath: /plugins
+          containers:
+            - name: grafana
+              env:
+                - name: GF_SECURITY_ADMIN_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: grafana-admin
+                      key: password
+                - name: GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS
+                  value: tamcore-llmanalysis-app
+              volumeMounts:
+                - name: llm-plugin
+                  mountPath: /var/lib/grafana/plugins/tamcore-llmanalysis-app
+                - name: llm-plugin-provisioning
+                  mountPath: /etc/grafana/provisioning/plugins
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+          volumes:
+            - name: llm-plugin
+              emptyDir: {}
+            - name: llm-plugin-provisioning
+              secret:
+                secretName: llm-plugin-config
+
+  ingress:
+    metadata:
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+        kubernetes.io/tls-acme: "true"
+    spec:
+      ingressClassName: nginx
+      rules:
+        - host: grafana.example.com
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: grafana-service
+                    port:
+                      number: 3000
+      tls:
+        - hosts:
+            - grafana.example.com
+          secretName: grafana-tls

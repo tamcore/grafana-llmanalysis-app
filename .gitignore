@@ -2,6 +2,8 @@
 .enrvrc
 node_modules/
 dist/
+plugin-dist/
 coverage/
 .eslintcache
 *.local
+*.tar.gz

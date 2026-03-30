@@ -105,11 +105,13 @@ deployment:
       spec:
         initContainers:
           - name: install-llm-plugin
-            image: busybox:latest
+            image: curlimages/curl:latest
             command: ["sh", "-c"]
             args:
               - |
-                wget -qO- https://github.com/tamcore/grafana-llmanalysis-app/releases/download/v1.0.0/tamcore-llmanalysis-app-1.0.0.tar.gz \
+                TAG=$(curl -sI https://github.com/tamcore/grafana-llmanalysis-app/releases/latest | grep -i '^location:' | sed 's|.*/||;s/\r$//')
+                ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+                curl -sL "https://github.com/tamcore/grafana-llmanalysis-app/releases/download/${TAG}/tamcore-llmanalysis-app-${TAG}-linux-${ARCH}.tar.gz" \
                   | tar xz -C /plugins/
             volumeMounts:
               - name: llm-plugin
@@ -122,6 +124,16 @@ deployment:
         volumes:
           - name: llm-plugin
             emptyDir: {}
+```
+
+To pin a specific version instead of using the latest release:
+
+```yaml
+            args:
+              - |
+                ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+                curl -sL "https://github.com/tamcore/grafana-llmanalysis-app/releases/download/v0.1.0/tamcore-llmanalysis-app-v0.1.0-linux-${ARCH}.tar.gz" \
+                  | tar xz -C /plugins/
 ```
 
 **Option B — PVC with manual upload**
@@ -480,11 +492,13 @@ spec:
         spec:
           initContainers:
             - name: install-llm-plugin
-              image: busybox:latest
+              image: curlimages/curl:latest
               command: ["sh", "-c"]
               args:
                 - |
-                  wget -qO- https://github.com/tamcore/grafana-llmanalysis-app/releases/download/v1.0.0/tamcore-llmanalysis-app-1.0.0.tar.gz \
+                  TAG=$(curl -sI https://github.com/tamcore/grafana-llmanalysis-app/releases/latest | grep -i '^location:' | sed 's|.*/||;s/\r$//')
+                  ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+                  curl -sL "https://github.com/tamcore/grafana-llmanalysis-app/releases/download/${TAG}/tamcore-llmanalysis-app-${TAG}-linux-${ARCH}.tar.gz" \
                     | tar xz -C /plugins/
               volumeMounts:
                 - name: llm-plugin
