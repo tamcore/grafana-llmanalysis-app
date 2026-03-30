@@ -736,3 +736,54 @@ func TestToolExecutor_ListAlertRules(t *testing.T) {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
 }
+
+func TestTruncateString_NoTruncation(t *testing.T) {
+t.Parallel()
+input := "short"
+got := truncateString(input, 100)
+if got != input {
+t.Errorf("truncateString(%q, 100) = %q, want unchanged", input, got)
+}
+}
+
+func TestTruncateString_TruncatesASCII(t *testing.T) {
+t.Parallel()
+input := "Hello, World!"
+got := truncateString(input, 5)
+if got != "Hello... [truncated]" {
+t.Errorf("truncateString(%q, 5) = %q", input, got)
+}
+}
+
+func TestTruncateString_DoesNotSplitMultiByte(t *testing.T) {
+t.Parallel()
+// 🔥 is 4 bytes. Build "🔥🔥" = 8 bytes, truncate at 5 bytes
+input := "🔥🔥"
+got := truncateString(input, 5)
+// Should walk back to byte 4 (start of second 🔥) and truncate there
+if !strings.HasPrefix(got, "🔥") {
+t.Errorf("expected prefix '🔥', got %q", got)
+}
+// Verify valid UTF-8
+for _, r := range got {
+if r == '\uFFFD' {
+t.Error("found replacement character — truncation split a multi-byte rune")
+}
+}
+}
+
+func TestTruncateString_CJKCharacters(t *testing.T) {
+t.Parallel()
+// 你 = 3 bytes, 好 = 3 bytes, 世 = 3 bytes, 界 = 3 bytes = 12 bytes
+input := "你好世界"
+got := truncateString(input, 7)
+// Should truncate at byte 6 (end of 好) since byte 7 is mid-rune
+if !strings.HasPrefix(got, "你好") {
+t.Errorf("expected prefix '你好', got %q", got)
+}
+for _, r := range got {
+if r == '\uFFFD' {
+t.Error("found replacement character")
+}
+}
+}

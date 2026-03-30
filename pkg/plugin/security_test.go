@@ -37,8 +37,39 @@ func TestSanitizePrompt_TruncatesLongInput(t *testing.T) {
 	}
 
 	got := sanitizePrompt(string(long))
-	if len(got) != maxPromptLength {
-		t.Errorf("len(sanitizePrompt) = %d, want %d", len(got), maxPromptLength)
+	if len([]rune(got)) != maxPromptLength {
+		t.Errorf("len(runes) = %d, want %d", len([]rune(got)), maxPromptLength)
+	}
+}
+
+func TestSanitizePrompt_TruncatesMultiByteRunes(t *testing.T) {
+	t.Parallel()
+
+	// Build a string of emoji runes that exceeds maxPromptLength runes
+	var b strings.Builder
+	for i := 0; i < maxPromptLength+10; i++ {
+		b.WriteRune('🔥') // 4 bytes each
+	}
+	got := sanitizePrompt(b.String())
+	runes := []rune(got)
+	if len(runes) != maxPromptLength {
+		t.Errorf("len(runes) = %d, want %d", len(runes), maxPromptLength)
+	}
+	// Verify valid UTF-8
+	for _, r := range got {
+		if r == '\uFFFD' {
+			t.Error("found replacement character — truncation split a rune")
+		}
+	}
+}
+
+func TestSanitizePrompt_PreservesCJK(t *testing.T) {
+	t.Parallel()
+
+	input := "你好世界" // 4 runes, 12 bytes
+	got := sanitizePrompt(input)
+	if got != input {
+		t.Errorf("sanitizePrompt(%q) = %q, want unchanged", input, got)
 	}
 }
 

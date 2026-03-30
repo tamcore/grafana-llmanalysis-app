@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
@@ -499,6 +500,10 @@ func resolveTime(s string, now time.Time) string {
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
+	}
+	// Walk back from maxLen to find a valid rune start
+	for maxLen > 0 && !utf8.RuneStart(s[maxLen]) {
+		maxLen--
 	}
 	return s[:maxLen] + "... [truncated]"
 }

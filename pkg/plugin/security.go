@@ -24,8 +24,10 @@ func sanitizePrompt(s string) string {
 	}
 
 	result := b.String()
-	if len(result) > maxPromptLength {
-		result = result[:maxPromptLength]
+	// Truncate at a rune boundary to avoid splitting multi-byte UTF-8
+	runes := []rune(result)
+	if len(runes) > maxPromptLength {
+		result = string(runes[:maxPromptLength])
 	}
 
 	return result
