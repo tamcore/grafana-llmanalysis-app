@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, FormEvent } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
-import { useStyles2, Field, Input, Select, Button, Alert, IconButton, Tooltip } from '@grafana/ui';
+import { useStyles2, Field, Input, Select, Button, Alert, IconButton, Tooltip, useTheme2 } from '@grafana/ui';
 import { getBackendSrv } from '@grafana/runtime';
 import { ChatView, ChatMessage } from '../components/ChatView';
 import { streamChat, sendChat, ChatHistory } from '../api';
@@ -78,6 +78,7 @@ function buildDashboardChatContext(data: GrafanaDashboard): AnalysisContext {
 
 export function DashboardChatPage() {
   const styles = useStyles2(getStyles);
+  const theme = useTheme2();
   const { sessions, loading: sessionsLoading, loadSession, saveSession, deleteSession, exportSession } = useChatSessions();
 
   const [dashboards, setDashboards] = useState<DashboardSearchResult[]>([]);
@@ -456,10 +457,10 @@ export function DashboardChatPage() {
                   width: `${Math.min((contextTokens / maxTokens) * 100, 100)}%`,
                   backgroundColor:
                     contextTokens / maxTokens > 0.9
-                      ? '#ff4d4f'
+                      ? theme.colors.error.main
                       : contextTokens / maxTokens > 0.7
-                        ? '#faad14'
-                        : '#52c41a',
+                        ? theme.colors.warning.main
+                        : theme.colors.success.main,
                 }}
               />
             </div>

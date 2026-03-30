@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, FormEvent } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2, SelectableValue } from '@grafana/data';
 import { getBackendSrv } from '@grafana/runtime';
-import { useStyles2, Field, Input, Button, Alert, MultiSelect, Switch, InlineField, IconButton, Tooltip } from '@grafana/ui';
+import { useStyles2, Field, Input, Button, Alert, MultiSelect, Switch, InlineField, IconButton, Tooltip, useTheme2 } from '@grafana/ui';
 import { ChatView, ChatMessage } from '../components/ChatView';
 import { streamChat, sendChat, ChatHistory } from '../api';
 import { AnalysisContext } from '../context';
@@ -23,6 +23,7 @@ interface DashboardEntry {
 
 export function ChatPage() {
   const styles = useStyles2(getStyles);
+  const theme = useTheme2();
   const { sessions, loading: sessionsLoading, loadSession, saveSession, deleteSession, exportSession } = useChatSessions();
 
   const [prompt, setPrompt] = useState('');
@@ -473,10 +474,10 @@ export function ChatPage() {
                   width: `${Math.min((contextTokens / maxTokens) * 100, 100)}%`,
                   backgroundColor:
                     contextTokens / maxTokens > 0.9
-                      ? '#ff4d4f'
+                      ? theme.colors.error.main
                       : contextTokens / maxTokens > 0.7
-                        ? '#faad14'
-                        : '#52c41a',
+                        ? theme.colors.warning.main
+                        : theme.colors.success.main,
                 }}
               />
             </div>

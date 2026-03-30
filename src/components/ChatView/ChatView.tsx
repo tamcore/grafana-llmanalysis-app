@@ -103,7 +103,7 @@ export function ChatView({ messages, isStreaming, streamContent, activeToolCalls
     <div data-testid="chat-view" className={styles.container}>
       {messages.map((msg, i) => (
         <div
-          key={i}
+          key={`msg-${i}-${msg.role}`}
           data-testid="chat-message"
           data-role={msg.role}
           className={msg.role === 'user' ? styles.userMessage : styles.assistantMessage}
@@ -123,7 +123,7 @@ export function ChatView({ messages, isStreaming, streamContent, activeToolCalls
             {activeToolCalls && activeToolCalls.length > 0 && (
               <div className={styles.toolCallsContainer}>
                 {activeToolCalls.map((tc, i) => (
-                  <ToolCallBadge key={i} name={tc.name} arguments={tc.arguments} />
+                  <ToolCallBadge key={`tc-${i}-${tc.name}`} name={tc.name} arguments={tc.arguments} />
                 ))}
               </div>
             )}
