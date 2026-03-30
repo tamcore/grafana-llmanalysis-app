@@ -23,6 +23,9 @@ type ChatRequest struct {
 	Prompt   string          `json:"prompt"`
 	Context  json.RawMessage `json:"context"`
 	Messages []ChatMessage   `json:"messages,omitempty"`
+
+	// authHeaders are injected by the handler, not from JSON.
+	authHeaders map[string]string `json:"-"`
 }
 
 // ChatResponse represents the chat completion response.
@@ -177,6 +180,7 @@ func (a *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Prompt = sanitizePrompt(req.Prompt)
+	req.authHeaders = extractAuthHeaders(r.Header)
 
 	if req.Prompt == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
