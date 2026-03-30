@@ -44,7 +44,7 @@ export interface StorageBackend {
 
 /** Generate a unique session ID. */
 export function generateSessionId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return crypto.randomUUID();
 }
 
 /** Derive a session title from the first user message. */
@@ -141,12 +141,38 @@ export async function exportSession(storage: StorageBackend, id: string): Promis
   return JSON.stringify(session, null, 2);
 }
 
+/** Type guard to validate untrusted JSON as a ChatSession. */
+function validateChatSession(obj: unknown): obj is ChatSession {
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
+  const o = obj as Record<string, unknown>;
+  return (
+    typeof o.id === 'string' &&
+    typeof o.title === 'string' &&
+    (o.mode === 'chat' || o.mode === 'dashboard-chat') &&
+    Array.isArray(o.messages) &&
+    o.messages.every(
+      (m: unknown) =>
+        typeof m === 'object' &&
+        m !== null &&
+        typeof (m as Record<string, unknown>).role === 'string' &&
+        typeof (m as Record<string, unknown>).content === 'string'
+    )
+  );
+}
+
 /** Import a session from JSON. Returns the imported session summary list. */
 export async function importSession(storage: StorageBackend, json: string): Promise<ChatSessionSummary[]> {
-  const session = JSON.parse(json) as ChatSession;
-  // Assign a new ID to avoid collisions
-  session.id = generateSessionId();
-  session.createdAt = new Date().toISOString();
-  session.updatedAt = new Date().toISOString();
+  const parsed: unknown = JSON.parse(json);
+  if (!validateChatSession(parsed)) {
+    throw new Error('Invalid session format');
+  }
+  const session: ChatSession = {
+    ...parsed,
+    id: generateSessionId(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
   return saveSession(storage, session);
 }
