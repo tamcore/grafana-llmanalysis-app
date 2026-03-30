@@ -302,7 +302,7 @@ ways to provision this declaratively.
 
 ### Option A — Grafana provisioning file (recommended)
 
-Mount a provisioning YAML via a ConfigMap. Grafana reads files in
+Mount a provisioning YAML via a Secret. Grafana reads files in
 `/etc/grafana/provisioning/plugins/` on startup and applies them automatically.
 
 ```yaml
@@ -324,9 +324,9 @@ stringData:
           timeoutSeconds: 60
           maxTokens: 4096
           maxContextTokens: 120000
+          grafanaTokenPath: "/var/run/secrets/grafana-sa/token"
         secureJsonData:
           apiKey: "sk-..."
-          grafanaToken: "glsa_..."
 ```
 
 Then add a volume mount to the `Grafana` CR:
@@ -366,11 +366,11 @@ curl -u admin:change-me -X POST \
       "model": "gpt-4o",
       "timeoutSeconds": 60,
       "maxTokens": 4096,
-      "maxContextTokens": 120000
+      "maxContextTokens": 120000,
+      "grafanaTokenPath": "/var/run/secrets/grafana-sa/token"
     },
     "secureJsonData": {
-      "apiKey": "sk-...",
-      "grafanaToken": "glsa_..."
+      "apiKey": "sk-..."
     }
   }'
 ```
@@ -382,22 +382,79 @@ curl -u admin:change-me -X POST \
 | `endpointURL` | jsonData | Base URL of your OpenAI-compatible API |
 | `model` | jsonData | Model name (e.g., `gpt-4o`) |
 | `apiKey` | **secureJsonData** | API key (stored encrypted in Grafana DB) |
-| `grafanaToken` | **secureJsonData** | Grafana service account token for tool calling |
+| `grafanaTokenPath` | jsonData | File path to read the SA token from (recommended for K8s) |
+| `grafanaToken` | **secureJsonData** | Static Grafana SA token (alternative to `grafanaTokenPath`) |
 | `timeoutSeconds` | jsonData | Request timeout (default: 60) |
 | `maxTokens` | jsonData | Max response tokens (default: 4096) |
 | `maxContextTokens` | jsonData | Context window limit for token tracking |
 
-> **Note:** `grafanaToken` is required for LLM tool calling (querying datasources,
-> listing dashboards, etc.). Without it, the plugin cannot access Grafana's API
-> and tool calls will fail with 401. Create a Grafana service account with
-> **Viewer** role and generate a token for it.
+> **Note:** Either `grafanaTokenPath` or `grafanaToken` is required for LLM tool
+> calling (querying datasources, listing dashboards, etc.). Without a service
+> account token, tool calls will fail with 401.
+>
+> `grafanaTokenPath` is recommended for Kubernetes deployments: it reads the token
+> from a mounted secret file on each request, so rotated tokens are picked up
+> automatically without pod restarts.
 
 ## 7. Service Accounts
 
-The plugin **requires** a Grafana service account token for tool calling. Without
-it, the LLM cannot query datasources, list dashboards, or access any Grafana API.
+The plugin **requires** a Grafana service account token for tool calling. The
+recommended approach for Kubernetes is to use the `GrafanaServiceAccount` CR,
+which creates the service account and stores its token in a Kubernetes Secret.
 
-Create a service account after Grafana is running:
+### GitOps flow with GrafanaServiceAccount (recommended)
+
+1. The `GrafanaServiceAccount` CR creates a service account in Grafana and stores
+   its token in a Kubernetes Secret.
+2. That Secret is mounted into the Grafana pod at a well-known path.
+3. The plugin reads the token from the file on each request via `grafanaTokenPath`.
+4. Token rotation requires no pod restarts — Kubernetes updates the mounted file
+   automatically.
+
+```yaml
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaServiceAccount
+metadata:
+  name: llm-plugin
+  namespace: grafana
+spec:
+  instanceName: grafana
+  name: llm-plugin
+  role: Viewer
+  tokens:
+    - name: tool-calling
+      secretName: llm-sa-token
+```
+
+Mount the token in the `Grafana` CR:
+
+```yaml
+deployment:
+  spec:
+    template:
+      spec:
+        containers:
+          - name: grafana
+            volumeMounts:
+              - name: sa-token
+                mountPath: /var/run/secrets/grafana-sa
+                readOnly: true
+        volumes:
+          - name: sa-token
+            secret:
+              secretName: llm-sa-token
+              optional: true
+```
+
+> The `optional: true` flag is important: on the first deployment, the SA token
+> secret does not exist yet (the operator creates it after Grafana starts). With
+> `optional: true`, the pod starts without the secret and the plugin operates
+> without tool calling. Once the operator creates the SA, Kubernetes mounts the
+> token file and subsequent tool calls use it — no restart needed.
+
+### Manual service account creation
+
+If you're not using grafana-operator's `GrafanaServiceAccount` CR:
 
 ```bash
 # Create a Viewer service account
@@ -413,39 +470,7 @@ curl -s -u admin:change-me \
   -d '{"name":"llm-tool-calling"}'
 ```
 
-Then add the `grafanaToken` to the plugin configuration (Option A or B above).
-
-Alternatively, use the `GrafanaServiceAccount` CRD to create a service account
-declaratively:
-
-```yaml
-apiVersion: grafana.integreatly.org/v1beta1
-kind: GrafanaServiceAccount
-metadata:
-  name: llm-plugin-admin
-  namespace: grafana
-spec:
-  instanceName: grafana
-  name: llm-plugin-admin
-  role: Editor
-  tokens:
-    - name: ci-token
-      secretName: llm-plugin-token
-      expires: "2027-01-01T00:00:00Z"
-```
-
-The operator creates the service account in Grafana and stores the token in the
-Kubernetes Secret specified by `secretName`. You can then use it to configure
-the plugin via the API:
-
-```bash
-TOKEN=$(kubectl get secret llm-plugin-token -n grafana -o jsonpath='{.data.token}' | base64 -d)
-
-curl -H "Authorization: Bearer $TOKEN" -X POST \
-  http://grafana.example.com/api/plugins/tamcore-llmanalysis-app/settings \
-  -H 'Content-Type: application/json' \
-  -d '{ "enabled": true, "jsonData": { ... }, "secureJsonData": { ... } }'
-```
+Then set `grafanaToken` in `secureJsonData` (Option A or B above).
 
 ### GrafanaServiceAccount fields
 
@@ -496,9 +521,9 @@ stringData:
           timeoutSeconds: 60
           maxTokens: 4096
           maxContextTokens: 120000
+          grafanaTokenPath: "/var/run/secrets/grafana-sa/token"
         secureJsonData:
           apiKey: "sk-..."
-          grafanaToken: "glsa_..."
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: Grafana
@@ -548,12 +573,32 @@ spec:
                 - name: llm-plugin-provisioning
                   mountPath: /etc/grafana/provisioning/plugins
                   readOnly: true
+                - name: sa-token
+                  mountPath: /var/run/secrets/grafana-sa
+                  readOnly: true
           volumes:
             - name: llm-plugin
               emptyDir: {}
             - name: llm-plugin-provisioning
               secret:
                 secretName: llm-plugin-config
+            - name: sa-token
+              secret:
+                secretName: llm-sa-token
+                optional: true
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaServiceAccount
+metadata:
+  name: llm-plugin
+  namespace: grafana
+spec:
+  instanceName: grafana
+  name: llm-plugin
+  role: Viewer
+  tokens:
+    - name: tool-calling
+      secretName: llm-sa-token
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
@@ -585,19 +630,6 @@ spec:
     type: loki
     access: proxy
     url: http://loki.monitoring.svc:3100
----
-apiVersion: grafana.integreatly.org/v1beta1
-kind: GrafanaServiceAccount
-metadata:
-  name: llm-admin
-  namespace: grafana
-spec:
-  instanceName: grafana
-  name: llm-admin
-  role: Editor
-  tokens:
-    - name: api-token
-      secretName: llm-admin-token
 EOF
 ```
 

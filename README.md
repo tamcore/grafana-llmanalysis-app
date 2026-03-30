@@ -124,7 +124,7 @@ guide using `Grafana`, `GrafanaDatasource`, and `GrafanaDashboard` CRDs.
    - **Endpoint URL** — Base URL of your LLM API (e.g., `https://api.openai.com/v1`)
    - **Model** — Model name (e.g., `gpt-4o`)
    - **API Key** — Your API key (stored securely in Grafana)
-   - **Grafana Service Account Token** — Required for tool calling (create a Viewer service account under Administration → Service Accounts)
+   - **Grafana Service Account Token** — Required for tool calling. Set `grafanaTokenPath` (recommended for K8s — reads token from a mounted secret file) or `grafanaToken` in secureJsonData (static token). Create a Viewer service account under Administration → Service Accounts.
    - **Timeout** — Request timeout in seconds (default: 60)
    - **Max Tokens** — Maximum response tokens (default: 4096)
    - **Max Context Tokens** — Context window limit for token tracking (e.g., 120000)

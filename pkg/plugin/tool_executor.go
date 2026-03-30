@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -18,7 +19,11 @@ type ToolExecutor struct {
 	grafanaURL     string
 	httpClient     *http.Client
 	defaultHeaders map[string]string
-	logger         log.Logger
+	// tokenPath is a file path containing a Grafana service account token.
+	// When set, the token is re-read on each request so that rotated tokens
+	// (e.g. from a Kubernetes secret mount) are picked up without a restart.
+	tokenPath string
+	logger    log.Logger
 }
 
 // NewToolExecutor creates a new tool executor.
@@ -427,6 +432,15 @@ func (te *ToolExecutor) doGrafanaRequest(ctx context.Context, method, path strin
 	for k, v := range te.defaultHeaders {
 		req.Header.Set(k, v)
 	}
+	// If a token file path is configured, read it on each request so
+	// rotated tokens (e.g. Kubernetes secret updates) are picked up.
+	if te.tokenPath != "" {
+		if token, err := readTokenFile(te.tokenPath); err != nil {
+			te.logger.Warn("Failed to read token file, falling back to default headers", "path", te.tokenPath, "error", err)
+		} else if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -486,4 +500,14 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "... [truncated]"
+}
+
+// readTokenFile reads a bearer token from a file, trimming whitespace.
+// Returns ("", nil) for empty files and ("", err) for read errors.
+func readTokenFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }

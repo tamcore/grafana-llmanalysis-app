@@ -26,6 +26,9 @@ type Settings struct {
 	MaxContextTokens int               `json:"maxContextTokens"`
 	CustomHeaders    map[string]string `json:"customHeaders,omitempty"`
 	GrafanaURL       string            `json:"grafanaURL,omitempty"`
+	// GrafanaTokenPath is a file path to read the Grafana service account token from.
+	// When set, the token is re-read on each request, enabling rotation without restarts.
+	GrafanaTokenPath string `json:"grafanaTokenPath,omitempty"`
 	// GrafanaServiceAcctToken is read from jsonData for convenience.
 	GrafanaServiceAcctToken string `json:"grafanaServiceAccountToken,omitempty"`
 	APIKey                  string `json:"-"`
@@ -85,7 +88,10 @@ func NewApp(_ context.Context, appSettings backend.AppInstanceSettings) (instanc
 	// Grafana strips auth headers from plugin backend requests, so a service
 	// account token is needed for the tool executor to call the Grafana API.
 	// When forwarded headers are present they take precedence (future-proofing).
-	if settings.GrafanaToken != "" {
+	if settings.GrafanaTokenPath != "" {
+		te.tokenPath = settings.GrafanaTokenPath
+		logger.Info("Tool executor configured with token file", "path", settings.GrafanaTokenPath)
+	} else if settings.GrafanaToken != "" {
 		te.defaultHeaders = map[string]string{
 			"Authorization": "Bearer " + settings.GrafanaToken,
 		}

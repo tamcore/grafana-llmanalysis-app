@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -111,5 +112,63 @@ func TestNewApp_InvalidJSON(t *testing.T) {
 	_, err := NewApp(context.Background(), settings)
 	if err == nil {
 		t.Fatal("NewApp() expected error for invalid JSON, got nil")
+	}
+}
+
+func TestNewApp_GrafanaTokenPath(t *testing.T) {
+	t.Parallel()
+
+	settings := backend.AppInstanceSettings{
+		JSONData: []byte(`{"endpointURL":"https://example.com/v1","model":"test","grafanaTokenPath":"/var/run/secrets/grafana-sa/token"}`),
+	}
+
+	inst, err := NewApp(context.Background(), settings)
+	if err != nil {
+		t.Fatalf("NewApp() returned error: %v", err)
+	}
+
+	app, ok := inst.(*App)
+	if !ok {
+		t.Fatal("NewApp() did not return *App")
+	}
+
+	if app.settings.GrafanaTokenPath != "/var/run/secrets/grafana-sa/token" {
+		t.Errorf("GrafanaTokenPath = %q, want %q", app.settings.GrafanaTokenPath, "/var/run/secrets/grafana-sa/token")
+	}
+
+	if app.toolExecutor.tokenPath != "/var/run/secrets/grafana-sa/token" {
+		t.Errorf("toolExecutor.tokenPath = %q, want %q", app.toolExecutor.tokenPath, "/var/run/secrets/grafana-sa/token")
+	}
+}
+
+func TestNewApp_GrafanaTokenPathTakesPrecedence(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	tokenFile := tmpDir + "/token"
+	if err := os.WriteFile(tokenFile, []byte("file-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := backend.AppInstanceSettings{
+		JSONData: []byte(`{"endpointURL":"https://example.com/v1","model":"test","grafanaTokenPath":"` + tokenFile + `"}`),
+		DecryptedSecureJSONData: map[string]string{
+			"grafanaToken": "static-token",
+		},
+	}
+
+	inst, err := NewApp(context.Background(), settings)
+	if err != nil {
+		t.Fatalf("NewApp() returned error: %v", err)
+	}
+
+	app, ok := inst.(*App)
+	if !ok {
+		t.Fatal("NewApp() did not return *App")
+	}
+
+	// tokenPath should be set on executor; static token should NOT be in defaultHeaders
+	if app.toolExecutor.tokenPath != tokenFile {
+		t.Errorf("tokenPath = %q, want %q", app.toolExecutor.tokenPath, tokenFile)
 	}
 }

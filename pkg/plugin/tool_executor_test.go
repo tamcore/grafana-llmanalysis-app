@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -439,6 +441,172 @@ func TestToolExecutor_ListAlerts_NoAlertmanager(t *testing.T) {
 	_, err := te.Execute(context.Background(), "list_alerts", `{}`, nil)
 	if err == nil {
 		t.Fatal("expected error when no alertmanager found")
+	}
+}
+
+func TestToolExecutor_TokenPath_ReadsFromFile(t *testing.T) {
+	t.Parallel()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("glsa_file_token_123"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var receivedAuth string
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	te.tokenPath = tokenFile
+	_, _ = te.Execute(context.Background(), "list_datasources", "{}", nil)
+
+	if receivedAuth != "Bearer glsa_file_token_123" {
+		t.Errorf("expected 'Bearer glsa_file_token_123', got %q", receivedAuth)
+	}
+}
+
+func TestToolExecutor_TokenPath_OverridesDefaultHeaders(t *testing.T) {
+	t.Parallel()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("glsa_file_token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var receivedAuth string
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	te.defaultHeaders = map[string]string{
+		"Authorization": "Bearer old_static_token",
+	}
+	te.tokenPath = tokenFile
+	_, _ = te.Execute(context.Background(), "list_datasources", "{}", nil)
+
+	if receivedAuth != "Bearer glsa_file_token" {
+		t.Errorf("expected file token to override static, got %q", receivedAuth)
+	}
+}
+
+func TestToolExecutor_TokenPath_TrimsWhitespace(t *testing.T) {
+	t.Parallel()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("  glsa_trimmed  \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var receivedAuth string
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	te.tokenPath = tokenFile
+	_, _ = te.Execute(context.Background(), "list_datasources", "{}", nil)
+
+	if receivedAuth != "Bearer glsa_trimmed" {
+		t.Errorf("expected trimmed token, got %q", receivedAuth)
+	}
+}
+
+func TestToolExecutor_TokenPath_MissingFileFallsBack(t *testing.T) {
+	t.Parallel()
+
+	var receivedAuth string
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	te.defaultHeaders = map[string]string{
+		"Authorization": "Bearer static_fallback",
+	}
+	te.tokenPath = "/nonexistent/path/token"
+	_, _ = te.Execute(context.Background(), "list_datasources", "{}", nil)
+
+	if receivedAuth != "Bearer static_fallback" {
+		t.Errorf("expected static fallback when file missing, got %q", receivedAuth)
+	}
+}
+
+func TestToolExecutor_TokenPath_EmptyFileFallsBack(t *testing.T) {
+	t.Parallel()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var receivedAuth string
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	te.defaultHeaders = map[string]string{
+		"Authorization": "Bearer static_fallback",
+	}
+	te.tokenPath = tokenFile
+	_, _ = te.Execute(context.Background(), "list_datasources", "{}", nil)
+
+	if receivedAuth != "Bearer static_fallback" {
+		t.Errorf("expected static fallback when file empty, got %q", receivedAuth)
+	}
+}
+
+func TestToolExecutor_TokenPath_PicksUpNewToken(t *testing.T) {
+	t.Parallel()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("token_v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var receivedAuth string
+	grafanaMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer grafanaMock.Close()
+
+	te := NewToolExecutor(grafanaMock.URL, log.DefaultLogger)
+	te.tokenPath = tokenFile
+
+	// First request uses v1
+	_, _ = te.Execute(context.Background(), "list_datasources", "{}", nil)
+	if receivedAuth != "Bearer token_v1" {
+		t.Fatalf("first request: expected token_v1, got %q", receivedAuth)
+	}
+
+	// Update file
+	if err := os.WriteFile(tokenFile, []byte("token_v2"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second request picks up v2
+	_, _ = te.Execute(context.Background(), "list_datasources", "{}", nil)
+	if receivedAuth != "Bearer token_v2" {
+		t.Errorf("second request: expected token_v2, got %q", receivedAuth)
 	}
 }
 

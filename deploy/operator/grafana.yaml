@@ -43,8 +43,11 @@ spec:
               volumeMounts:
                 - name: llm-plugin
                   mountPath: /var/lib/grafana/plugins/tamcore-llmanalysis-app
-                - name: llm-plugin-provisioning
+                - name: llm-plugin-config
                   mountPath: /etc/grafana/provisioning/plugins
+                  readOnly: true
+                - name: sa-token
+                  mountPath: /var/run/secrets/grafana-sa
                   readOnly: true
               resources:
                 requests:
@@ -56,9 +59,13 @@ spec:
           volumes:
             - name: llm-plugin
               emptyDir: {}
-            - name: llm-plugin-provisioning
+            - name: llm-plugin-config
               secret:
                 secretName: llm-plugin-config
+            - name: sa-token
+              secret:
+                secretName: llm-sa-token
+                optional: true
 
   ingress:
     metadata:
