@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -41,6 +43,17 @@ type App struct {
 	logger       log.Logger
 	metrics      *metrics
 	toolExecutor *ToolExecutor
+	limiters     sync.Map
+}
+
+// getLimiter returns a per-user rate limiter (10 requests per minute).
+func (a *App) getLimiter(user string) *rate.Limiter {
+	if v, ok := a.limiters.Load(user); ok {
+		return v.(*rate.Limiter)
+	}
+	limiter := rate.NewLimiter(rate.Limit(10.0/60.0), 10)
+	actual, _ := a.limiters.LoadOrStore(user, limiter)
+	return actual.(*rate.Limiter)
 }
 
 // NewApp creates a new plugin instance from the given settings.

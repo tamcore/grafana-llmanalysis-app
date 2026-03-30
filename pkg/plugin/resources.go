@@ -74,6 +74,11 @@ func (a *App) CallResource(ctx context.Context, req *backend.CallResourceRequest
 }
 
 func (a *App) handleStreamResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	user := extractUser(req.Headers)
+	if !a.getLimiter(user).Allow() {
+		return sendErrorResponse(sender, http.StatusTooManyRequests, "rate limit exceeded")
+	}
+
 	var chatReq ChatRequest
 	if err := json.Unmarshal(req.Body, &chatReq); err != nil {
 		return sendErrorResponse(sender, http.StatusBadRequest, "invalid request body: "+err.Error())
@@ -152,6 +157,17 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleChat(w http.ResponseWriter, r *http.Request) {
+	user := r.Header.Get("X-Grafana-User")
+	if user == "" {
+		user = "anonymous"
+	}
+	if !a.getLimiter(user).Allow() {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{
+			"error": "rate limit exceeded",
+		})
+		return
+	}
+
 	var req ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
@@ -217,6 +233,16 @@ func (a *App) handleNotFound(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusNotFound, map[string]string{
 		"error": "not found",
 	})
+}
+
+// extractUser returns the Grafana user from request headers, defaulting to "anonymous".
+func extractUser(headers map[string][]string) string {
+	for _, key := range []string{"X-Grafana-User", "x-grafana-user"} {
+		if vals, ok := headers[key]; ok && len(vals) > 0 && vals[0] != "" {
+			return vals[0]
+		}
+	}
+	return "anonymous"
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

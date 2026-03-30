@@ -211,3 +211,63 @@ func TestResourceUnknownPath(t *testing.T) {
 		t.Errorf("status = %d, want %d", statusCode, http.StatusNotFound)
 	}
 }
+
+func TestStreamResource_RateLimitExceeded(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t, "http://localhost:1/v1", "key")
+
+	// Exhaust the burst of 10
+	for i := 0; i < 10; i++ {
+		req := &backend.CallResourceRequest{
+			Path:    "chat/stream",
+			Method:  http.MethodPost,
+			Body:    []byte(`{"mode":"chat","prompt":"test","context":{}}`),
+			Headers: map[string][]string{"X-Grafana-User": {"testuser"}},
+		}
+		sender := backend.CallResourceResponseSenderFunc(func(_ *backend.CallResourceResponse) error { return nil })
+		_ = app.CallResource(context.Background(), req, sender)
+	}
+
+	// 11th request should be rate limited
+	req := &backend.CallResourceRequest{
+		Path:    "chat/stream",
+		Method:  http.MethodPost,
+		Body:    []byte(`{"mode":"chat","prompt":"test","context":{}}`),
+		Headers: map[string][]string{"X-Grafana-User": {"testuser"}},
+	}
+
+	var statusCode int
+	sender := backend.CallResourceResponseSenderFunc(func(res *backend.CallResourceResponse) error {
+		statusCode = res.Status
+		return nil
+	})
+
+	err := app.CallResource(context.Background(), req, sender)
+	if err != nil {
+		t.Fatalf("CallResource returned error: %v", err)
+	}
+
+	if statusCode != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want %d", statusCode, http.StatusTooManyRequests)
+	}
+}
+
+func TestExtractUser_FromHeaders(t *testing.T) {
+	t.Parallel()
+
+	headers := map[string][]string{
+		"X-Grafana-User": {"admin"},
+	}
+	if got := extractUser(headers); got != "admin" {
+		t.Errorf("extractUser() = %q, want %q", got, "admin")
+	}
+}
+
+func TestExtractUser_DefaultsToAnonymous(t *testing.T) {
+	t.Parallel()
+
+	if got := extractUser(nil); got != "anonymous" {
+		t.Errorf("extractUser(nil) = %q, want %q", got, "anonymous")
+	}
+}
