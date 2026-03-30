@@ -40,6 +40,7 @@ const PREVIEW_LENGTH = 100;
 export interface StorageBackend {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
+  removeItem?(key: string): Promise<void>;
 }
 
 /** Generate a unique session ID. */
@@ -125,7 +126,11 @@ export async function saveSession(storage: StorageBackend, session: ChatSession)
 
 /** Delete a session and update the index. */
 export async function deleteSession(storage: StorageBackend, id: string): Promise<ChatSessionSummary[]> {
-  await storage.setItem(SESSION_KEY_PREFIX + id, '');
+  if (storage.removeItem) {
+    await storage.removeItem(SESSION_KEY_PREFIX + id);
+  } else {
+    await storage.setItem(SESSION_KEY_PREFIX + id, '');
+  }
   const index = await loadSessionIndex(storage);
   const filtered = index.filter((s) => s.id !== id);
   await storage.setItem(INDEX_KEY, JSON.stringify(filtered));
