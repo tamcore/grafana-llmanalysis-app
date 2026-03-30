@@ -40,12 +40,20 @@ export function useChatSessions(): UseChatSessionsResult {
 
   useEffect(() => {
     let cancelled = false;
-    loadSessionIndex(storageRef.current).then((index) => {
-      if (!cancelled) {
-        setSessions(index);
-        setLoading(false);
-      }
-    });
+    loadSessionIndex(storageRef.current)
+      .then((index) => {
+        if (!cancelled) {
+          setSessions(index);
+        }
+      })
+      .catch(() => {
+        // Storage unavailable — start with empty index
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };

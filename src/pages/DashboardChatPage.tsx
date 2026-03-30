@@ -205,12 +205,16 @@ export function DashboardChatPage() {
 
       if (session.context.dashboardUid) {
         setSelectedUid(session.context.dashboardUid);
-        await loadDashboard(session.context.dashboardUid);
-        // Restore messages from session (loadDashboard resets them)
-        setMessages(session.messages);
+        // Load dashboard context directly without resetting messages
+        try {
+          const data: GrafanaDashboard = await getBackendSrv().get(`/api/dashboards/uid/${session.context.dashboardUid}`);
+          setDashboardContext(buildDashboardChatContext(data));
+        } catch {
+          setError('Failed to load dashboard');
+        }
       }
     },
-    [loadSession, loadDashboard]
+    [loadSession]
   );
 
   const handleExportSession = useCallback(
@@ -274,8 +278,10 @@ export function DashboardChatPage() {
           fullContent += chunk.content;
           setStreamContent(fullContent);
         }
-      } catch {
+      } catch (err: unknown) {
         if (!fullContent.trim()) {
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          setError(message);
           try {
             const resp = await sendChat('summarize_dashboard', userMessage.content, dashboardContext, history);
             if (resp.content?.trim()) {
