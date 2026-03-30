@@ -52,6 +52,7 @@ export function ChatPage() {
   messagesRef.current = messages;
   const sessionIdRef = useRef(currentSessionId);
   sessionIdRef.current = currentSessionId;
+  const abortRef = useRef<AbortController | null>(null);
 
   // Fetch datasources and dashboards on mount
   useEffect(() => {
@@ -64,6 +65,10 @@ export function ChatPage() {
       .get('/api/search?type=dash-db&limit=100')
       .then((d: DashboardEntry[]) => setDashboards(d))
       .catch(() => {});
+
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   const datasourceOptions: Array<SelectableValue<string>> = datasources.map((ds) => ({
@@ -158,6 +163,7 @@ export function ChatPage() {
   );
 
   const startNewChat = useCallback(() => {
+    abortRef.current?.abort();
     setCurrentSessionId(null);
     sessionIdRef.current = null;
     setMessages([]);
@@ -235,11 +241,14 @@ export function ChatPage() {
       setStreamContent('');
       setActiveToolCalls([]);
 
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
       let fullContent = '';
       let newContextTokens = contextTokens;
       let newMaxTokens = maxTokens;
       try {
-        for await (const chunk of streamChat('chat', userMessage.content, context, history)) {
+        for await (const chunk of streamChat('chat', userMessage.content, context, history, abortRef.current.signal)) {
           if (chunk.done) {
             if (chunk.contextTokens) {
               newContextTokens = chunk.contextTokens;

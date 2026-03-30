@@ -27,7 +27,8 @@ export async function* streamChat(
   mode: AnalysisMode,
   prompt: string,
   context: AnalysisContext,
-  messages?: ChatHistory[]
+  messages?: ChatHistory[],
+  signal?: AbortSignal
 ): AsyncGenerator<ChatResponse> {
   const request: ChatRequest = { mode, prompt, context, messages };
 
@@ -36,6 +37,7 @@ export async function* streamChat(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
     credentials: 'include',
+    signal,
   });
 
   if (!response.ok) {

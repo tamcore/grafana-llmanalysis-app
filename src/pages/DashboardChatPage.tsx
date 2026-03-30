@@ -99,6 +99,7 @@ export function DashboardChatPage() {
 
   const sessionIdRef = useRef(currentSessionId);
   sessionIdRef.current = currentSessionId;
+  const abortRef = useRef<AbortController | null>(null);
 
   // Fetch dashboard list
   useEffect(() => {
@@ -106,6 +107,10 @@ export function DashboardChatPage() {
       .get('/api/search?type=dash-db&limit=50')
       .then((results: DashboardSearchResult[]) => setDashboards(results))
       .catch(() => setError('Failed to load dashboards'));
+
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   // Load selected dashboard
@@ -170,6 +175,7 @@ export function DashboardChatPage() {
   );
 
   const startNewChat = useCallback(() => {
+    abortRef.current?.abort();
     setCurrentSessionId(null);
     sessionIdRef.current = null;
     setMessages([]);
@@ -238,13 +244,16 @@ export function DashboardChatPage() {
       setStreamContent('');
       setActiveToolCalls([]);
 
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
       const history: ChatHistory[] = messages.map((m) => ({ role: m.role, content: m.content }));
 
       let fullContent = '';
       let newContextTokens = contextTokens;
       let newMaxTokens = maxTokens;
       try {
-        for await (const chunk of streamChat('summarize_dashboard', userMessage.content, dashboardContext, history)) {
+        for await (const chunk of streamChat('summarize_dashboard', userMessage.content, dashboardContext, history, abortRef.current.signal)) {
           if (chunk.done) {
             if (chunk.contextTokens) {
               newContextTokens = chunk.contextTokens;
